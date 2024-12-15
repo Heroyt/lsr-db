@@ -12,8 +12,9 @@
 namespace Lsr\Db;
 
 use Dibi\Helpers;
-use InvalidArgumentException;
+use Dibi\Result;
 use Lsr\Caching\Cache;
+use Lsr\Db\Dibi\Fluent;
 use Lsr\Serializer\Mapper;
 use RuntimeException;
 
@@ -39,6 +40,23 @@ use RuntimeException;
  *          prefix?: string,
  *          lazy?: string|bool,
  *  }
+ *
+ * @method static void transaction(callable $callback)
+ * @method static void begin(string|null $savepoint=null)
+ * @method static void commit(string|null $savepoint=null)
+ * @method static void rollback(string|null $savepoint=null)
+ * @method static Result query(string $query, mixed ...$args)
+ * @method static Fluent select(string|string[] $table, mixed ...$args)
+ * @method static Fluent|int update(string $table, array $args, array|null $where = null)
+ * @method static int insert(string $table, array ...$args)
+ * @method static Fluent insertGet(string $table, array ...$args)
+ * @method static int insertIgnore(string $table, array ...$args)
+ * @method static int delete(string $table, array $where = [])
+ * @method static Fluent deleteGet(string $table)
+ * @method static int replace(string $table, array $values)
+ * @method static int getInsertId()
+ * @method static int getAffectedRows()
+ * @method static Result resetAutoIncrement(string $table)
  */
 class DB
 {
@@ -125,10 +143,9 @@ class DB
             'driver' => $config['driver'] ?? 'mysqli',
         ];
         assert(!empty($options['driver']));
-        if (empty($config['host'])) {
-            throw new InvalidArgumentException('Database host cannot be empty');
+        if (!empty($config['host'])) {
+            $options['host'] = $config['host'];
         }
-        $options['host'] = $config['host'];
         if (!empty($config['port'])) {
             $options['port'] = (int) $config['port'];
         }
@@ -182,5 +199,11 @@ class DB
             throw new RuntimeException('Database is not initialized');
         }
         return self::$db;
+    }
+
+    public static function close() : void {
+        if (isset(self::$db)) {
+            self::$db->close();
+        }
     }
 }

@@ -4,7 +4,6 @@ declare(strict_types=1);
 namespace Lsr\Db;
 
 use DateTimeInterface;
-use dibi;
 use Dibi\Connection as DibiConnection;
 use Dibi\DriverException;
 use Dibi\Exception;
@@ -20,7 +19,7 @@ use Throwable;
  * @phpstan-type Config array{
  *     lazy?: bool,
  *     driver: non-empty-string,
- *     host: non-empty-string,
+ *     host?: non-empty-string,
  *     port?: int,
  *     user?: string,
  *     password?: string,
@@ -153,6 +152,9 @@ final class Connection
      * @since 1.0
      */
     public function select(array | string $table, ...$args) : Fluent {
+        if (empty($args)) {
+            $args = ['*'];
+        }
         $query = $this->connection->select(...$args);
         if (is_string($table)) {
             $query->from($table);
@@ -305,7 +307,7 @@ final class Connection
      * @throws Exception
      */
     public function replace(string $table, array $values) : int {
-        $multiple = array_any($values, 'is_array');
+        $multiple = array_any($values, static fn($val) => is_array($val));
 
         $args = [];
         $valueArgs = [];

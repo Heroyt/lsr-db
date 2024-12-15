@@ -9,7 +9,7 @@
     }
   ],
   "scripts": {
-    "test": "./vendor/bin/phpunit",
+    "test": "XDEBUG_MODE=coverage ./vendor/bin/phpunit",
     "docs": "doxygen",
     "phpstan": "./vendor/bin/phpstan"
   },
