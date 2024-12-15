@@ -1,0 +1,59 @@
+{
+  "name": "lsr/db",
+  "description": "Laser framework core - DB",
+  "version": "0.3.0",
+  "repositories": [
+    {
+      "type": "composer",
+      "url": "https://packages.laserliga.cz"
+    }
+  ],
+  "scripts": {
+    "test": "./vendor/bin/phpunit",
+    "docs": "doxygen",
+    "phpstan": "./vendor/bin/phpstan"
+  },
+  "require-dev": {
+    "roave/security-advisories": "dev-latest",
+    "phpunit/phpunit": "^11",
+    "phpstan/phpstan": "^2.0",
+    "phpstan/extension-installer": "^1.2",
+    "phpstan/phpstan-dibi": "^2.0",
+    "phpstan/phpstan-nette": "^2.0",
+    "jetbrains/phpstorm-attributes": "^1.2"
+  },
+  "autoload": {
+    "psr-4": {
+      "Lsr\\Db\\": "src/"
+    }
+  },
+  "autoload-dev": {
+    "psr-4": {
+      "TestCases\\": "tests/TestCases/"
+    }
+  },
+  "authors": [
+    {
+      "name": "Tomáš Vojík",
+      "email": "vojik@wboy.cz"
+    }
+  ],
+  "minimum-stability": "stable",
+  "require": {
+    "php": ">= 8.4",
+    "lsr/logging": "^0.2",
+    "lsr/cache": "^0.3",
+    "lsr/serializer": "^0.3",
+    "dibi/dibi": "^5"
+  },
+  "config": {
+    "allow-plugins": {
+      "phpstan/extension-installer": true
+    }
+  },
+  "extra": {
+    "branch-alias": {
+      "v0.2": "0.2.x-dev"
+    }
+  }
+}

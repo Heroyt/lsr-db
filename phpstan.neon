@@ -1,0 +1,10 @@
+parameters:
+	dynamicConstantNames:
+		- ROOT
+		- TMP_DIR
+		- LOG_DIR
+	editorUrl: 'phpstorm://open?file=%%file%%&line=%%line%%'
+	level: max
+	paths:
+		- src
+	tmpDir: temp
