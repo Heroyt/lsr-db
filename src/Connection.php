@@ -138,6 +138,11 @@ final class Connection
      * @throws Exception
      */
     public function query(#[Language('GenericSQL')] string $query, mixed ...$args): Result {
+        foreach ($args as $key => $arg) {
+            if ($arg instanceof Fluent || $arg instanceof \Dibi\Fluent) {
+                $args[$key] = $arg->__toString();
+            }
+        }
         return $this->connection->query($query, ...$args);
     }
 
@@ -170,7 +175,7 @@ final class Connection
      * @return Fluent
      */
     private function getFluent(\Dibi\Fluent $query) : Fluent {
-        return new Fluent($query, $this->cache, $this->mapper);
+        return new Fluent($query, $this, $this->cache, $this->mapper);
     }
 
     /**

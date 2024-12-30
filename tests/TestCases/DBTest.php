@@ -889,6 +889,33 @@ class DBTest extends TestCase
 
     }
 
+    public function testExists() : void {
+        $this->initSqlite();
+        DB::insert(
+            'table1',
+            [
+                'name' => 'ijoink',
+                'age'  => 10,
+            ]
+        );
+        DB::insert(
+            'table1',
+            [
+                'name' => 'ijoink',
+                'age'  => 20,
+            ]
+        );
+
+        $result = DB::select('table1', '*')->where('age > 10')->exists();
+        self::assertTrue($result);
+        $result = DB::select('table1', '*')->where('age > 10')->exists(false);
+        self::assertTrue($result);
+        $result = DB::select('table1', '*')->where('age < 10')->exists();
+        self::assertFalse($result);
+        $result = DB::select('table1', '*')->where('age < 10')->exists(false);
+        self::assertFalse($result);
+    }
+
     protected function setUp() : void {
         $this->cache = new Cache(
             new DevNullStorage(),

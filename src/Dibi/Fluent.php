@@ -5,6 +5,7 @@ namespace Lsr\Db\Dibi;
 use Dibi\Fluent as DibiFluent;
 use Dibi\Result;
 use Lsr\Caching\Cache;
+use Lsr\Db\Connection;
 use Lsr\Serializer\Mapper;
 
 /**
@@ -46,13 +47,14 @@ final class Fluent
     /** @var non-empty-string[] */
     private array $cacheTags = [];
     private string $table;
-    private(set) string $method;
+    public private(set) string $method;
 
     /**
      * @param  non-empty-string|int  $cacheExpire
      */
     public function __construct(
         private(set) DibiFluent $fluent,
+        private readonly Connection $connection,
         private readonly Cache $cache,
         private readonly Mapper $mapper,
         private(set) string|int $cacheExpire = self::DEFAULT_CACHE_EXPIRE,
@@ -161,7 +163,7 @@ final class Fluent
 
     public function from(string $table, mixed ...$args) : Fluent {
         foreach ($args as $key => $arg) {
-            if ($arg instanceof static) {
+            if ($arg instanceof self) {
                 $args[$key] = $arg->fluent;
             }
         }

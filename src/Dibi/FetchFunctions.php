@@ -64,9 +64,7 @@ trait FetchFunctions
             /** @phpstan-ignore return.type */
             return $this->cache->load(
                 'sql/'.$this->getQueryHash().'/fetch',
-                function () {
-                    return $this->fluent->fetch();
-                },
+                fn() => $this->fluent->fetch(),
                 [
                     Cache::Expire => $this->cacheExpire,
                     Cache::Tags   => $this->getCacheTags(),
@@ -157,9 +155,7 @@ trait FetchFunctions
             /** @phpstan-ignore return.type */
             return $this->cache->load(
                 'sql/'.$this->getQueryHash().'/fetchAll/'.$offset.'/'.$limit,
-                function () use ($offset, $limit) {
-                    return $this->fluent->fetchAll($offset, $limit);
-                },
+                fn() => $this->fluent->fetchAll($offset, $limit),
                 [
                     Cache::Expire => $this->cacheExpire,
                     Cache::Tags   => $this->getCacheTags(),
@@ -306,9 +302,7 @@ trait FetchFunctions
             /** @phpstan-ignore return.type */
             return $this->cache->load(
                 'sql/'.$this->getQueryHash().'/fetchAssoc/'.$assoc,
-                function () use ($assoc) {
-                    return $this->fluent->fetchAssoc($assoc);
-                },
+                fn() => $this->fluent->fetchAssoc($assoc),
                 [
                     Cache::Expire => $this->cacheExpire,
                     Cache::Tags   => $this->getCacheTags(),
@@ -327,20 +321,21 @@ trait FetchFunctions
      */
     public function fetchPairs(?string $key = null, ?string $value = null, bool $cache = true) : array {
         if (!$cache) {
+            /** @phpstan-ignore return.type */
             return $this->fluent->fetchPairs($key, $value);
         }
         try {
+            /** @phpstan-ignore return.type */
             return $this->cache->load(
                 'sql/'.$this->getQueryHash().'/fetchPairs/'.$key.'/'.$value,
-                function () use ($key, $value) {
-                    return $this->fluent->fetchPairs($key, $value);
-                },
+                fn() => $this->fluent->fetchPairs($key, $value),
                 [
                     Cache::Expire => $this->cacheExpire,
                     Cache::Tags   => $this->getCacheTags(),
                 ]
             );
         } catch (Throwable) {
+            /** @phpstan-ignore return.type */
             return $this->fluent->fetchPairs($key, $value);
         }
     }
@@ -359,9 +354,7 @@ trait FetchFunctions
         try {
             return $this->cache->load(
                 'sql/'.$this->getQueryHash().'/count',
-                function () : int {
-                    return $this->fluent->count();
-                },
+                fn() : int => $this->fluent->count(),
                 [
                     Cache::Expire => $this->cacheExpire,
                     Cache::Tags   => $this->getCacheTags(),
@@ -369,6 +362,31 @@ trait FetchFunctions
             );
         } catch (Throwable) {
             return $this->fluent->count();
+        }
+    }
+
+    /**
+     * Wraps the current query in the SQL EXISTS() function.
+     *
+     * @param  bool  $cache
+     * @return bool
+     * @throws Exception
+     */
+    public function exists(bool $cache = true) : bool {
+        if (!$cache) {
+            return !empty($this->connection->query('SELECT EXISTS(%sql)', $this)->fetchSingle());
+        }
+        try {
+            return $this->cache->load(
+                'sql/'.$this->getQueryHash().'/exists',
+                fn() : bool => !empty($this->connection->query('SELECT EXISTS(%sql)', $this)->fetchSingle()),
+                [
+                    Cache::Expire => $this->cacheExpire,
+                    Cache::Tags   => $this->getCacheTags(),
+                ]
+            );
+        } catch (Throwable) {
+            return !empty($this->connection->query('SELECT EXISTS(%sql)', $this)->fetchSingle());
         }
     }
 
