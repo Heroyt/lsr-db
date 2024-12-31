@@ -386,6 +386,44 @@ class DBTest extends TestCase
     }
 
     #[Depends('testInitSqlite')]
+    public function testResetAutoIncrementSqlite() : void {
+        $this->initSqlite();
+        DB::insert(
+            'table1',
+            [
+                'name' => 'test1',
+                'age'  => null,
+            ]
+        );
+        DB::insert(
+            'table1',
+            [
+                'name' => 'test2',
+                'age'  => 10,
+            ]
+        );
+        DB::delete('table1');
+        DB::insert(
+            'table1',
+            [
+                'name' => 'test1',
+                'age'  => null,
+            ]
+        );
+        self::assertEquals(3, DB::getInsertId());
+        DB::delete('table1');
+        DB::resetAutoIncrement('table1');
+        DB::insert(
+            'table1',
+            [
+                'name' => 'test1',
+                'age'  => null,
+            ]
+        );
+        self::assertEquals(1, DB::getInsertId());
+    }
+
+    #[Depends('testInitSqlite')]
     public function testInsertGet() : void {
         $this->initSqlite();
         $query = DB::insertGet(

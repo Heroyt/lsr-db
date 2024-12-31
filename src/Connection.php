@@ -268,6 +268,9 @@ final class Connection
      * @throws Exception
      */
     public function resetAutoIncrement(string $table) : Result {
+        if ($this->config['driver'] === 'sqlite') {
+            return $this->connection->query('delete from sqlite_sequence where name=%s;', $table);
+        }
         return $this->connection->query('ALTER TABLE %n AUTO_INCREMENT = 1', $table);
     }
 
