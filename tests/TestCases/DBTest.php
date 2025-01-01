@@ -17,8 +17,6 @@ use Lsr\Serializer\Mapper;
 use Lsr\Serializer\Normalizer\DateTimeNormalizer;
 use Lsr\Serializer\Normalizer\DibiRowNormalizer;
 use Nette\Caching\Storages\DevNullStorage;
-use Nette\Caching\Storages\SQLiteStorage;
-use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Depends;
 use PHPUnit\Framework\TestCase;
 use RuntimeException;
@@ -623,6 +621,10 @@ class DBTest extends TestCase
         self::assertEquals('test1', $row->name);
         self::assertEquals(null, $row->age);
         self::assertEquals('test3', $row->value);
+
+        // Test select with no table
+        $rows = DB::select()->from('table1', 'a')->fetchAll(cache: false);
+        self::assertCount(2, $rows);
     }
 
     #[Depends('testSelect')]

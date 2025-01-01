@@ -46,7 +46,7 @@ use RuntimeException;
  * @method static void commit(string|null $savepoint=null)
  * @method static void rollback(string|null $savepoint=null)
  * @method static Result query(string $query, mixed ...$args)
- * @method static Fluent select(string|string[] $table, mixed ...$args)
+ * @method static Fluent select(string|string[]|null $table = null, mixed ...$args = null)
  * @method static Fluent|int update(string $table, array $args, array|null $where = null)
  * @method static int insert(string $table, array ...$args)
  * @method static Fluent insertGet(string $table, array ...$args)

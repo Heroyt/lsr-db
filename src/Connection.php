@@ -149,14 +149,14 @@ final class Connection
     /**
      * Start query select
      *
-     * @param  string[]|string  $table
+     * @param  string[]|string|null  $table
      * @param  mixed  ...$args
      *
      * @return Fluent
      *
      * @since 1.0
      */
-    public function select(array | string $table, ...$args) : Fluent {
+    public function select(array | string | null $table = null, ...$args) : Fluent {
         if (empty($args)) {
             $args = ['*'];
         }
@@ -164,7 +164,7 @@ final class Connection
         if (is_string($table)) {
             $query->from($table);
         }
-        else {
+        else if (is_array($table)) {
             $query->from(...$table);
         }
         return $this->getFluent($query);
