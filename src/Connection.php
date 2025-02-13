@@ -174,7 +174,7 @@ final class Connection
      * @param  \Dibi\Fluent  $query
      * @return Fluent
      */
-    private function getFluent(\Dibi\Fluent $query) : Fluent {
+    public function getFluent(\Dibi\Fluent $query) : Fluent {
         return new Fluent($query, $this, $this->cache, $this->mapper);
     }
 
