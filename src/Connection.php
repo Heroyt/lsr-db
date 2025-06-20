@@ -256,7 +256,7 @@ final class Connection
      */
     public function insertIgnore(string $table, iterable $args) : int {
         $query = $this->connection->insert($table, $args);
-        if ($this->connection->getDriver() instanceof SQliteDriver) {
+        if ($this->connection->getDriver() instanceof SqliteDriver) {
             $query->setFlag('OR IGNORE');
         }
         else {
