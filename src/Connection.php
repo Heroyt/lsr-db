@@ -6,6 +6,7 @@ namespace Lsr\Db;
 use DateTimeInterface;
 use Dibi\Connection as DibiConnection;
 use Dibi\DriverException;
+use Dibi\Drivers\SqliteDriver;
 use Dibi\Exception;
 use Dibi\Result;
 use JetBrains\PhpStorm\Language;
@@ -254,7 +255,14 @@ final class Connection
      * @throws Exception
      */
     public function insertIgnore(string $table, iterable $args) : int {
-        $result = $this->connection->insert($table, $args)->setFlag('IGNORE')->execute(\Dibi\Fluent::AffectedRows);
+        $query = $this->connection->insert($table, $args);
+        if ($this->connection->getDriver() instanceof SqliteDriver) {
+            $query->setFlag('OR IGNORE');
+        }
+        else {
+            $query->setFlag('IGNORE');
+        }
+        $result = $query->execute(\Dibi\Fluent::AffectedRows);
         assert(is_int($result));
         return $result;
     }
