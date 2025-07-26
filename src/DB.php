@@ -183,7 +183,7 @@ class DB
         if (!isset(self::$db)) {
             throw new RuntimeException('Database is not connected');
         }
-        return self::$db->{$name}(...$arguments);
+        return self::$db->{$name}(...array_values($arguments));
     }
 
 
