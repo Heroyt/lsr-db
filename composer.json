@@ -15,7 +15,7 @@
   },
   "require-dev": {
     "roave/security-advisories": "dev-latest",
-    "phpunit/phpunit": "^11",
+    "phpunit/phpunit": "^12",
     "phpstan/phpstan": "^2.0",
     "phpstan/extension-installer": "^1.2",
     "phpstan/phpstan-dibi": "^2.0",
