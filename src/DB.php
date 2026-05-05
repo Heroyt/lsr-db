@@ -31,6 +31,8 @@ use RuntimeException;
  * @since   1.0
  * @phpstan-type Config array{
  *          driver?: string,
+ *          dsn?: string,
+ *          pdoDriver?: string,
  *          host?: string,
  *          port?: numeric,
  *          user?: string,
@@ -39,6 +41,7 @@ use RuntimeException;
  *          collate?: string,
  *          prefix?: string,
  *          lazy?: string|bool,
+ *          options?: array<array-key, mixed>,
  *  }
  *
  * @method static void transaction(callable $callback)
@@ -47,13 +50,13 @@ use RuntimeException;
  * @method static void rollback(string|null $savepoint=null)
  * @method static Result query(string $query, mixed ...$args)
  * @method static Fluent select(string|string[]|null $table = null, mixed ...$args = null)
- * @method static Fluent|int update(string $table, array $args, array|null $where = null)
- * @method static int insert(string $table, array ...$args)
- * @method static Fluent insertGet(string $table, array ...$args)
- * @method static int insertIgnore(string $table, array ...$args)
- * @method static int delete(string $table, array $where = [])
+ * @method static Fluent|int update(string $table, array<string, mixed> $args, array<mixed>|null $where = null)
+ * @method static int insert(string $table, array<string, mixed> ...$args)
+ * @method static Fluent insertGet(string $table, array<string, mixed> ...$args)
+ * @method static int insertIgnore(string $table, array<string, mixed> ...$args)
+ * @method static int delete(string $table, array<mixed> $where = [])
  * @method static Fluent deleteGet(string $table)
- * @method static int replace(string $table, array $values)
+ * @method static int replace(string $table, array<string, mixed> $values)
  * @method static int getInsertId()
  * @method static int getAffectedRows()
  * @method static Result resetAutoIncrement(string $table)
@@ -112,6 +115,14 @@ class DB
             if ($database === false) {
                 $database = '';
             }
+            $dsn = getenv('DB_dsn');
+            if ($dsn === false) {
+                $dsn = '';
+            }
+            $pdoDriver = getenv('DB_pdoDriver');
+            if ($pdoDriver === false) {
+                $pdoDriver = '';
+            }
             $collate = getenv('DB_collate');
             if ($collate === false) {
                 $collate = 'utf8mb4';
@@ -131,6 +142,8 @@ class DB
                 'user'     => $user,
                 'password' => $password,
                 'database' => $database,
+                'dsn' => $dsn,
+                'pdoDriver' => $pdoDriver,
                 'collate'  => $collate,
                 'prefix'   => $prefix,
                 'lazy'     => $lazy,
@@ -155,11 +168,20 @@ class DB
         if (!empty($config['password'])) {
             $options['password'] = $config['password'];
         }
-        if (!empty($config['database'])) {
-            $options['database'] = $config['database'];
-        }
-        if (!empty($config['collate'])) {
-            $options['charset'] = $config['collate'];
+        if ($options['driver'] === 'pdo') {
+            $options['dsn'] = !empty($config['dsn'])
+                ? $config['dsn']
+                : self::buildPdoDsn($config);
+            if (isset($config['options'])) {
+                $options['options'] = $config['options'];
+            }
+        } else {
+            if (!empty($config['database'])) {
+                $options['database'] = $config['database'];
+            }
+            if (!empty($config['collate'])) {
+                $options['charset'] = $config['collate'];
+            }
         }
         if (!empty($config['prefix'])) {
             $options['prefix'] = $config['prefix'];
@@ -172,6 +194,78 @@ class DB
             $options,
             'main'
         );
+    }
+
+    /**
+     * @param Config $config
+     */
+    private static function buildPdoDsn(array $config): string
+    {
+        $pdoDriver = strtolower((string)($config['pdoDriver'] ?? 'mysql'));
+
+        return match ($pdoDriver) {
+            'sqlite' => 'sqlite:' . ($config['database'] ?? ':memory:'),
+            'pgsql', 'postgres', 'postgresql' => self::buildPdoKvDsn(
+                'pgsql',
+                [
+                    'host' => $config['host'] ?? null,
+                    'port' => $config['port'] ?? null,
+                    'dbname' => $config['database'] ?? null,
+                ]
+            ),
+            'sqlsrv' => self::buildPdoSqlsrvDsn($config),
+            'mysql', 'mariadb' => self::buildPdoKvDsn(
+                'mysql',
+                [
+                    'host' => $config['host'] ?? null,
+                    'port' => $config['port'] ?? null,
+                    'dbname' => $config['database'] ?? null,
+                    'charset' => $config['collate'] ?? null,
+                ]
+            ),
+            default => self::buildPdoKvDsn(
+                $pdoDriver,
+                [
+                    'host' => $config['host'] ?? null,
+                    'port' => $config['port'] ?? null,
+                    'dbname' => $config['database'] ?? null,
+                ]
+            ),
+        };
+    }
+
+    /**
+     * @param array<string, float|int|string|null> $parts
+     */
+    private static function buildPdoKvDsn(string $driver, array $parts): string
+    {
+        $segments = [];
+        foreach ($parts as $key => $value) {
+            if ($value === null || $value === '') {
+                continue;
+            }
+            $segments[] = $key . '=' . $value;
+        }
+        return $driver . ':' . implode(';', $segments);
+    }
+
+    /**
+     * @param Config $config
+     */
+    private static function buildPdoSqlsrvDsn(array $config): string
+    {
+        $segments = [];
+        if (!empty($config['host'])) {
+            $server = $config['host'];
+            if (!empty($config['port'])) {
+                $server .= ',' . (string)$config['port'];
+            }
+            $segments[] = 'Server=' . $server;
+        }
+        if (!empty($config['database'])) {
+            $segments[] = 'Database=' . $config['database'];
+        }
+        return 'sqlsrv:' . implode(';', $segments);
     }
 
     /**

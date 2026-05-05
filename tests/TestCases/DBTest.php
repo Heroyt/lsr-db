@@ -26,6 +26,7 @@ use Symfony\Component\Serializer\Normalizer\BackedEnumNormalizer;
 use Symfony\Component\Serializer\Normalizer\JsonSerializableNormalizer;
 use Symfony\Component\Serializer\Normalizer\ObjectNormalizer;
 use Symfony\Component\Serializer\Serializer;
+use Throwable;
 
 /**
  * Database abstraction test suite
@@ -53,7 +54,7 @@ class DBTest extends TestCase
         try {
             DB::getConnection()->query("DROP TABLE table2");
             DB::getConnection()->query("DROP TABLE table1");
-        } catch (RuntimeException) {
+        } catch (Throwable) {
 
         }
     }
@@ -207,6 +208,28 @@ class DBTest extends TestCase
         $this->initSqliteTable();
     }
 
+    public function initPdoSqlite(): void
+    {
+        if (!extension_loaded('pdo_sqlite')) {
+            self::markTestSkipped('PDO SQLite extension is not available.');
+        }
+
+        $fileName = uniqid('', true) . '.db';
+        DB::init(
+            DB::getMain(
+                $this->cache,
+                $this->mapper,
+                [
+                    'database' => ROOT . "tests/tmp/$fileName",
+                    'driver' => 'pdo',
+                    'pdoDriver' => 'sqlite',
+                    'prefix' => '',
+                ]
+            )
+        );
+        $this->initSqliteTable();
+    }
+
     public function initSqliteTable() : void {
         DB::getConnection()->query(
             "
@@ -335,6 +358,59 @@ class DBTest extends TestCase
         self::assertTrue(DB::getConnection()->isConnected());
         DB::close();
         self::assertFalse(DB::getConnection()->isConnected());
+    }
+
+    public function testInitPdoSqlite(): void
+    {
+        $this->initPdoSqlite();
+        self::assertTrue(DB::getConnection()->isConnected());
+        DB::close();
+        self::assertFalse(DB::getConnection()->isConnected());
+    }
+
+    public function testPdoConfigBuildsMysqlDsn(): void
+    {
+        $connection = DB::getMain(
+            $this->cache,
+            $this->mapper,
+            [
+                'driver' => 'pdo',
+                'pdoDriver' => 'mysql',
+                'host' => 'localhost',
+                'port' => 3306,
+                'user' => 'root',
+                'password' => '',
+                'database' => 'test',
+                'collate' => 'utf8mb4',
+                'lazy' => true,
+            ]
+        );
+
+        self::assertSame('pdo', $connection->connection->getConfig('driver'));
+        self::assertSame('mysql:host=localhost;port=3306;dbname=test;charset=utf8mb4', $connection->connection->getConfig('dsn'));
+        self::assertSame('root', $connection->connection->getConfig('username'));
+        self::assertSame('localhost', $connection->connection->getConfig('host'));
+        self::assertSame(3306, $connection->connection->getConfig('port'));
+        self::assertTrue($connection->connection->getConfig('lazy'));
+    }
+
+    public function testPdoConfigUsesExplicitDsn(): void
+    {
+        $connection = DB::getMain(
+            $this->cache,
+            $this->mapper,
+            [
+                'driver' => 'pdo',
+                'dsn' => 'sqlite::memory:',
+                'options' => [\PDO::ATTR_TIMEOUT => 2],
+                'lazy' => true,
+            ]
+        );
+
+        self::assertSame('pdo', $connection->connection->getConfig('driver'));
+        self::assertSame('sqlite::memory:', $connection->connection->getConfig('dsn'));
+        self::assertSame([\PDO::ATTR_TIMEOUT => 2], $connection->connection->getConfig('options'));
+        self::assertTrue($connection->connection->getConfig('lazy'));
     }
 
     public function testInitMysql() : void {

@@ -23,9 +23,12 @@ use Throwable;
  *     host?: non-empty-string,
  *     port?: int,
  *     user?: string,
+ *     username?: string|null,
  *     password?: string,
  *     database?: non-empty-string,
  *     collate?: non-empty-string,
+ *     dsn?: string,
+ *     options?: array<array-key, mixed>,
  *     prefix?: string,
  * }
  */
@@ -45,7 +48,6 @@ final class Connection
         }
     }
 
-    /** @phpstan-ignore property.unused */
     private Logger $logger {
         get {
             if (!isset($this->logger)) {
@@ -62,16 +64,38 @@ final class Connection
         private readonly Cache   $cache,
         private readonly Mapper  $mapper,
         private readonly array   $config,
-        /** @phpstan-ignore property.onlyWritten */
         private readonly ?string $name = null,
     ) {
+        $sqliteFile = $this->getSqliteFilePath();
+        if (isset($sqliteFile) && !file_exists($sqliteFile)) {
+            touch($sqliteFile);
+        }
+    }
+
+    /**
+     * @return non-empty-string|null
+     */
+    private function getSqliteFilePath(): ?string
+    {
         if ($this->config['driver'] === 'sqlite') {
             /** @phpstan-ignore constant.notFound, binaryOp.invalid */
-            $dbFile = $this->config['database'] ?? TMP_DIR.'db.db';
-            if (!file_exists($dbFile)) {
-                touch($dbFile);
-            }
+            return $this->config['database'] ?? TMP_DIR . 'db.db';
         }
+
+        if ($this->config['driver'] !== 'pdo') {
+            return null;
+        }
+
+        $dsn = $this->config['dsn'] ?? null;
+        if (!is_string($dsn) || !str_starts_with($dsn, 'sqlite:')) {
+            return null;
+        }
+
+        $path = substr($dsn, 7);
+        if ($path === '' || $path === ':memory:') {
+            return null;
+        }
+        return $path;
     }
 
     /**
