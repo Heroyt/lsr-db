@@ -27,6 +27,7 @@ use Throwable;
  *     password?: string,
  *     database?: non-empty-string,
  *     collate?: non-empty-string,
+ *     pdoDriver?: string,
  *     dsn?: string,
  *     options?: array<array-key, mixed>,
  *     prefix?: string,
@@ -34,6 +35,8 @@ use Throwable;
  */
 final class Connection
 {
+    /** @var Config */
+    private array $config;
 
     public DibiConnection $connection {
         get {
@@ -63,13 +66,100 @@ final class Connection
     public function __construct(
         private readonly Cache   $cache,
         private readonly Mapper  $mapper,
-        private readonly array   $config,
+        array $config,
         private readonly ?string $name = null,
     ) {
+        /** @var Config $config */
+        $this->config = $this->normalizeConfig($config);
         $sqliteFile = $this->getSqliteFilePath();
         if (isset($sqliteFile) && !file_exists($sqliteFile)) {
             touch($sqliteFile);
         }
+    }
+
+    /**
+     * @param Config $config
+     * @return Config
+     */
+    private function normalizeConfig(array $config): array
+    {
+        $driver = strtolower($config['driver']);
+        if (str_starts_with($driver, 'pdo_') || str_starts_with($driver, 'pdo-')) {
+            $config['pdoDriver'] ??= substr($driver, 4);
+            $config['driver'] = 'pdo';
+            $driver = 'pdo';
+        }
+
+        if ($driver !== 'pdo' || !empty($config['dsn'])) {
+            return $config;
+        }
+
+        $pdoDriver = strtolower((string)($config['pdoDriver'] ?? 'mysql'));
+        $config['dsn'] = match ($pdoDriver) {
+            'sqlite' => 'sqlite:' . ($config['database'] ?? ':memory:'),
+            'pgsql', 'postgres', 'postgresql' => $this->buildPdoKvDsn(
+                'pgsql',
+                [
+                    'host' => $config['host'] ?? null,
+                    'port' => $config['port'] ?? null,
+                    'dbname' => $config['database'] ?? null,
+                ]
+            ),
+            'sqlsrv' => $this->buildPdoSqlsrvDsn($config),
+            'mysql', 'mariadb' => $this->buildPdoKvDsn(
+                'mysql',
+                [
+                    'host' => $config['host'] ?? null,
+                    'port' => $config['port'] ?? null,
+                    'dbname' => $config['database'] ?? null,
+                    'charset' => $config['collate'] ?? null,
+                ]
+            ),
+            default => $this->buildPdoKvDsn(
+                $pdoDriver,
+                [
+                    'host' => $config['host'] ?? null,
+                    'port' => $config['port'] ?? null,
+                    'dbname' => $config['database'] ?? null,
+                ]
+            ),
+        };
+
+        return $config;
+    }
+
+    /**
+     * @param array<string, float|int|string|null> $parts
+     */
+    private function buildPdoKvDsn(string $driver, array $parts): string
+    {
+        $segments = [];
+        foreach ($parts as $key => $value) {
+            if ($value === null || $value === '') {
+                continue;
+            }
+            $segments[] = $key . '=' . $value;
+        }
+        return $driver . ':' . implode(';', $segments);
+    }
+
+    /**
+     * @param Config $config
+     */
+    private function buildPdoSqlsrvDsn(array $config): string
+    {
+        $segments = [];
+        if (!empty($config['host'])) {
+            $server = $config['host'];
+            if (!empty($config['port'])) {
+                $server .= ',' . (string)$config['port'];
+            }
+            $segments[] = 'Server=' . $server;
+        }
+        if (!empty($config['database'])) {
+            $segments[] = 'Database=' . $config['database'];
+        }
+        return 'sqlsrv:' . implode(';', $segments);
     }
 
     /**

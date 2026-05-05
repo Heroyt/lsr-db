@@ -413,6 +413,49 @@ class DBTest extends TestCase
         self::assertTrue($connection->connection->getConfig('lazy'));
     }
 
+    public function testDirectConnectionBuildsPdoDsn(): void
+    {
+        $connection = new Connection(
+            $this->cache,
+            $this->mapper,
+            [
+                'driver' => 'pdo',
+                'pdoDriver' => 'mysql',
+                'host' => 'localhost',
+                'port' => 3306,
+                'user' => 'root',
+                'password' => '',
+                'database' => 'test',
+                'collate' => 'utf8mb4',
+                'lazy' => true,
+            ]
+        );
+
+        self::assertSame('pdo', $connection->connection->getConfig('driver'));
+        self::assertSame('mysql:host=localhost;port=3306;dbname=test;charset=utf8mb4', $connection->connection->getConfig('dsn'));
+    }
+
+    public function testDirectConnectionBuildsAliasedPdoDsn(): void
+    {
+        $connection = new Connection(
+            $this->cache,
+            $this->mapper,
+            [
+                'driver' => 'pdo_mysql',
+                'host' => 'localhost',
+                'port' => 3306,
+                'user' => 'root',
+                'password' => '',
+                'database' => 'test',
+                'collate' => 'utf8mb4',
+                'lazy' => true,
+            ]
+        );
+
+        self::assertSame('pdo', $connection->connection->getConfig('driver'));
+        self::assertSame('mysql:host=localhost;port=3306;dbname=test;charset=utf8mb4', $connection->connection->getConfig('dsn'));
+    }
+
     public function testInitMysql() : void {
         // Init MySQL
         $this->initMysql();
