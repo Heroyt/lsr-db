@@ -38,6 +38,9 @@ final class Connection
     /** @var Config */
     private array $config;
 
+    /** @var string[] */
+    private array $transactionSavepoints = [];
+
     public DibiConnection $connection {
         get {
             if (!isset($this->connection)) {
@@ -228,7 +231,15 @@ final class Connection
      * @throws DriverException
      */
     public function begin(?string $savepoint = null) : void {
-        $this->connection->begin($savepoint);
+        if ($this->transactionSavepoints === []) {
+            $this->connection->begin($savepoint);
+            $this->transactionSavepoints[] = $savepoint ?? '__transaction__';
+            return;
+        }
+
+        $savepoint ??= 'lsr_nested_' . count($this->transactionSavepoints);
+        $this->connection->query('SAVEPOINT %n', $savepoint);
+        $this->transactionSavepoints[] = $savepoint;
     }
 
     /**
@@ -237,7 +248,18 @@ final class Connection
      * @throws DriverException
      */
     public function rollback(?string $savepoint = null) : void {
-        $this->connection->rollback($savepoint);
+        $currentSavepoint = array_pop($this->transactionSavepoints);
+        if ($currentSavepoint === null) {
+            $this->connection->rollback($savepoint);
+            return;
+        }
+        if ($this->transactionSavepoints === []) {
+            $this->connection->rollback($savepoint);
+            return;
+        }
+
+        $this->connection->query('ROLLBACK TO SAVEPOINT %n', $savepoint ?? $currentSavepoint);
+        $this->connection->query('RELEASE SAVEPOINT %n', $savepoint ?? $currentSavepoint);
     }
 
     /**
@@ -246,7 +268,17 @@ final class Connection
      * @throws DriverException
      */
     public function commit(?string $savepoint = null) : void {
-        $this->connection->commit($savepoint);
+        $currentSavepoint = array_pop($this->transactionSavepoints);
+        if ($currentSavepoint === null) {
+            $this->connection->commit($savepoint);
+            return;
+        }
+        if ($this->transactionSavepoints === []) {
+            $this->connection->commit($savepoint);
+            return;
+        }
+
+        $this->connection->query('RELEASE SAVEPOINT %n', $savepoint ?? $currentSavepoint);
     }
 
     /**
@@ -329,13 +361,13 @@ final class Connection
     public function insert(string $table, array ...$args) : int {
         if (count($args) > 1) {
             $result = $this->connection->command()
-                                    ->insert()
-                                    ->into('%n', $table, '(%n)', array_keys($args[0]))
-                                    ->values(
-                                           '%l'.str_repeat(', %l', count($args) - 1),
-                                        ...$args
-                                    )
-                                    ->execute(\Dibi\Fluent::AffectedRows);
+                ->insert()
+                ->into('%n', $table, '(%n)', array_keys($args[0]))
+                ->values(
+                    '%l' . str_repeat(', %l', count($args) - 1),
+                    ...$args
+                )
+                ->execute(\Dibi\Fluent::AffectedRows);
             assert(is_int($result));
             return $result;
         }
