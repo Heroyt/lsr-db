@@ -56,7 +56,7 @@ use RuntimeException;
  * @method static int insertIgnore(string $table, array<string, mixed> ...$args)
  * @method static int delete(string $table, array<mixed> $where = [])
  * @method static Fluent deleteGet(string $table)
- * @method static int replace(string $table, array<string, mixed> $values)
+ * @method static int replace(string $table, array<string, mixed>|array<int, array<string, mixed>> $values)
  * @method static int getInsertId()
  * @method static int getAffectedRows()
  * @method static Result resetAutoIncrement(string $table)

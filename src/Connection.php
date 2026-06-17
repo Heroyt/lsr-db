@@ -46,7 +46,7 @@ final class Connection
             if (!isset($this->connection)) {
                 $this->connection = new DibiConnection($this->config, $this->name);
                 if (!empty($this->config['prefix'])) {
-                    $this->connection->getSubstitutes()->{''} = $this->config['prefix'];
+                    $this->connection->getSubstitutes()->__set('', $this->config['prefix']);
                 }
                 $this->connection->onEvent[] = [$this->logger, 'logDb'];
             }
@@ -171,7 +171,6 @@ final class Connection
     private function getSqliteFilePath(): ?string
     {
         if ($this->config['driver'] === 'sqlite') {
-            /** @phpstan-ignore constant.notFound, binaryOp.invalid */
             return $this->config['database'] ?? TMP_DIR . 'db.db';
         }
 
@@ -463,7 +462,7 @@ final class Connection
 
     /**
      * @param  string  $table
-     * @param  array<string, mixed>|array<array<string, mixed>>  $values
+     * @param  array<string, mixed>|array<int, array<string, mixed>>  $values
      *
      * @return int
      * @throws Exception

@@ -23,7 +23,6 @@ trait FetchFunctions
             /** @phpstan-ignore return.type */
             return $this->fluent
                 ->execute()
-                ?->setRowClass($class)
                 ?->setRowFactory($this->getRowFactory($class))
                 ?->fetch();
         }
@@ -32,7 +31,6 @@ trait FetchFunctions
             return $this->cache->load(
                 'sql/'.$this->getQueryHash().'/fetch/'.$class,
                 fn() => $this->fluent->execute()
-                                     ?->setRowClass($class)
                                      ?->setRowFactory($this->getRowFactory($class))
                                      ?->fetch(),
                 [
@@ -44,7 +42,6 @@ trait FetchFunctions
             /** @phpstan-ignore return.type */
             return $this->fluent
                 ->execute()
-                ?->setRowClass($class)
                 ?->setRowFactory($this->getRowFactory($class))
                 ?->fetch();
         }
@@ -115,7 +112,6 @@ trait FetchFunctions
         if (!$cache) {
             /** @phpstan-ignore return.type */
             return $this->fluent->execute()
-                                ?->setRowClass($class)
                                 ?->setRowFactory($this->getRowFactory($class))
                                 ?->fetchAll();
         }
@@ -124,7 +120,6 @@ trait FetchFunctions
             return $this->cache->load(
                 'sql/'.$this->getQueryHash().'/fetchAll/'.$offset.'/'.$limit.'/'.$class,
                 fn() => $this->fluent->execute()
-                                     ?->setRowClass($class)
                                      ?->setRowFactory($this->getRowFactory($class))
                                      ?->fetchAll(),
                 [
@@ -135,7 +130,6 @@ trait FetchFunctions
         } catch (Throwable) {
             /** @phpstan-ignore return.type */
             return $this->fluent->execute()
-                                ?->setRowClass($class)
                                 ?->setRowFactory($this->getRowFactory($class))
                                 ?->fetchAll();
         }
@@ -177,7 +171,6 @@ trait FetchFunctions
     public function fetchIteratorDto(string $class, bool $cache = true) : Iterator {
         if (!$cache) {
             $query = $this->fluent->execute()
-                                  ?->setRowClass($class)
                                   ?->setRowFactory($this->getRowFactory($class));
             while ($row = $query?->fetch()) {
                 /** @var T $row */
@@ -260,7 +253,6 @@ trait FetchFunctions
         if (!$cache) {
             /** @phpstan-ignore return.type */
             return $this->fluent->execute()
-                                ?->setRowClass($class)
                                 ?->setRowFactory($this->getRowFactory($class))
                                 ?->fetchAssoc($assoc) ?? [];
         }
@@ -269,7 +261,6 @@ trait FetchFunctions
             return $this->cache->load(
                 'sql/'.$this->getQueryHash().'/fetchAssoc/'.$assoc,
                 fn() => $this->fluent->execute()
-                                     ?->setRowClass($class)
                                      ?->setRowFactory($this->getRowFactory($class))
                                      ?->fetchAssoc($assoc) ?? [],
                 [
@@ -280,7 +271,6 @@ trait FetchFunctions
         } catch (Throwable) {
             /** @phpstan-ignore return.type */
             return $this->fluent->execute()
-                                ?->setRowClass($class)
                                 ?->setRowFactory($this->getRowFactory($class))
                                 ?->fetchAssoc($assoc) ?? [];
         }
