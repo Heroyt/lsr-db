@@ -317,6 +317,25 @@ final class Connection
         return $this->getFluent($query);
     }
 
+    /**
+     * Start query from a table before selecting fields.
+     *
+     * @param  string[]|string  $table
+     * @param  mixed  ...$args
+     *
+     * @return Fluent
+     */
+    public function from(array | string $table, mixed ...$args) : Fluent {
+        $query = $this->connection->select();
+        if (is_string($table)) {
+            $query->from($table, ...$args);
+        }
+        else {
+            $query->from(...$table);
+        }
+        return $this->getFluent($query)->requireSelect();
+    }
+
     public function getSelectForUpdateModifier() : ?string {
         return match ($this->getDriverFamily()) {
             'mysql', 'mysqli', 'mariadb', 'pgsql', 'postgres', 'postgresql', 'postgre', 'oci', 'oracle' => 'FOR UPDATE',

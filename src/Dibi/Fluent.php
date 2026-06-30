@@ -53,6 +53,7 @@ final class Fluent
     private array $resultSetups = [];
     private string $table;
     private bool $forUpdate = false;
+    private bool $requiresSelect = false;
     public private(set) string $method;
 
     /**
@@ -80,6 +81,7 @@ final class Fluent
     public function select(mixed ...$field) : Fluent {
         $field = $this->transformArgs($field);
         $this->method = 'select';
+        $this->requiresSelect = false;
         $this->fluent->select(...$field);
         $this->queryHash = null;
         return $this;
@@ -141,6 +143,15 @@ final class Fluent
     }
 
     /**
+     * @return $this
+     */
+    public function requireSelect() : Fluent {
+        $this->requiresSelect = true;
+        $this->queryHash = null;
+        return $this;
+    }
+
+    /**
      * Locks selected rows for update until the current transaction is completed.
      *
      * This modifier is available only for drivers that support the trailing
@@ -184,6 +195,7 @@ final class Fluent
      * @return ($return is DibiFluent::Identifier|DibiFluent::AffectedRows ? int : Result|null)
      */
     public function execute(?string $return = null) : Result|int|null {
+        $this->assertSelectClauseReady();
         if (!$this->forUpdate) {
             return $this->fluent->execute($return);
         }
@@ -200,6 +212,7 @@ final class Fluent
      * @param  list<mixed>  $exportArgs
      */
     private function executeSelect(array $exportArgs = []) : Result {
+        $this->assertSelectClauseReady();
         $result = $this->connection->query($this->getSql($exportArgs));
         foreach ($this->resultSetups as $setup) {
             $method = array_shift($setup);
@@ -213,6 +226,7 @@ final class Fluent
      * @return Row|array<mixed>|null
      */
     public function fetchRow() : Row | array | null {
+        $this->assertSelectClauseReady();
         if (!$this->forUpdate) {
             return $this->normalizeFetchedRow($this->fluent->fetch());
         }
@@ -223,6 +237,7 @@ final class Fluent
     }
 
     public function fetchSingleValue() : mixed {
+        $this->assertSelectClauseReady();
         if (!$this->forUpdate) {
             return $this->fluent->fetchSingle();
         }
@@ -234,6 +249,7 @@ final class Fluent
      * @return Row[]
      */
     public function fetchAllRows(?int $offset = null, ?int $limit = null) : array {
+        $this->assertSelectClauseReady();
         if (!$this->forUpdate) {
             return $this->fluent->fetchAll($offset, $limit);
         }
@@ -245,6 +261,7 @@ final class Fluent
      * @return array<mixed>
      */
     public function fetchAssocRows(string $assoc) : array {
+        $this->assertSelectClauseReady();
         if (!$this->forUpdate) {
             return $this->fluent->fetchAssoc($assoc);
         }
@@ -256,6 +273,7 @@ final class Fluent
      * @return array<string, mixed>|array<int,mixed>
      */
     public function fetchPairRows(?string $key = null, ?string $value = null) : array {
+        $this->assertSelectClauseReady();
         if (!$this->forUpdate) {
             return $this->fluent->fetchPairs($key, $value);
         }
@@ -294,6 +312,7 @@ final class Fluent
      * @param  list<mixed>  $exportArgs
      */
     private function getSql(array $exportArgs = []) : string {
+        $this->assertSelectClauseReady();
         if (!$this->forUpdate && $exportArgs === []) {
             return $this->fluent->__toString();
         }
@@ -321,6 +340,14 @@ final class Fluent
             throw new LogicException('SELECT FOR UPDATE is not supported by the configured database driver.');
         }
         return $sql.' '.$modifier;
+    }
+
+    private function assertSelectClauseReady() : void {
+        if (!$this->requiresSelect) {
+            return;
+        }
+
+        throw new LogicException('A query started with from() requires a later select() call.');
     }
 
     /**

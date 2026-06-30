@@ -50,6 +50,7 @@ use RuntimeException;
  * @method static void rollback(string|null $savepoint=null)
  * @method static Result query(string $query, mixed ...$args)
  * @method static Fluent select(string|string[]|null $table = null, mixed ...$args = null)
+ * @method static Fluent from(string|string[] $table, mixed ...$args)
  * @method static Fluent|int update(string $table, array<string, mixed> $args, array<mixed>|null $where = null)
  * @method static int insert(string $table, array<string, mixed> ...$args)
  * @method static Fluent insertGet(string $table, array<string, mixed> ...$args)

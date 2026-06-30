@@ -338,6 +338,7 @@ trait FetchFunctions
      * @return int
      */
     public function count(bool $cache = true) : int {
+        $this->assertSelectClauseReady();
         if (!$cache) {
             return $this->fluent->count();
         }

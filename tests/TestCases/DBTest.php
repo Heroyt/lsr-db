@@ -778,6 +778,29 @@ class DBTest extends TestCase
         // Test select with no table
         $rows = DB::select()->from('table1', 'a')->fetchAll(cache: false);
         self::assertCount(2, $rows);
+
+        // Test from starter followed by select
+        $rows = DB::from('table1')
+                  ->select('*')
+                  ->fetchAll(cache: false);
+        self::assertCount(2, $rows);
+
+        // Test from starter with alias followed by select
+        $rows = DB::from(['table1', 'a'])
+                  ->select('a.id, a.name')
+                  ->fetchAll(cache: false);
+        self::assertCount(2, $rows);
+    }
+
+    #[Depends('testInitSqlite')]
+    public function testFromRequiresSelect(): void
+    {
+        $this->initSqlite();
+
+        $this->expectException(LogicException::class);
+        $this->expectExceptionMessage('requires a later select() call');
+
+        DB::from('table1')->fetchAll(cache: false);
     }
 
     #[Depends('testSelect')]
