@@ -21,7 +21,7 @@ trait FetchFunctions
     public function fetchDto(string $class, bool $cache = true) : ?object {
         if (!$cache) {
             /** @phpstan-ignore return.type */
-            return $this->fluent
+            return $this
                 ->execute()
                 ?->setRowFactory($this->getRowFactory($class))
                 ?->fetch();
@@ -30,7 +30,7 @@ trait FetchFunctions
             /** @phpstan-ignore return.type */
             return $this->cache->load(
                 'sql/'.$this->getQueryHash().'/fetch/'.$class,
-                fn() => $this->fluent->execute()
+                fn() => $this->execute()
                                      ?->setRowFactory($this->getRowFactory($class))
                                      ?->fetch(),
                 [
@@ -40,7 +40,7 @@ trait FetchFunctions
             );
         } catch (Throwable) {
             /** @phpstan-ignore return.type */
-            return $this->fluent
+            return $this
                 ->execute()
                 ?->setRowFactory($this->getRowFactory($class))
                 ?->fetch();
@@ -55,13 +55,13 @@ trait FetchFunctions
     public function fetch(bool $cache = true) : Row | array | null {
         if (!$cache) {
             /** @phpstan-ignore return.type */
-            return $this->fluent->fetch();
+            return $this->fetchRow();
         }
         try {
             /** @phpstan-ignore return.type */
             return $this->cache->load(
                 'sql/'.$this->getQueryHash().'/fetch',
-                fn() => $this->fluent->fetch(),
+                fn() => $this->fetchRow(),
                 [
                     Cache::Expire => $this->cacheExpire,
                     Cache::Tags   => $this->getCacheTags(),
@@ -69,7 +69,7 @@ trait FetchFunctions
             );
         } catch (Throwable) {
             /** @phpstan-ignore return.type */
-            return $this->fluent->fetch();
+            return $this->fetchRow();
         }
     }
 
@@ -81,19 +81,19 @@ trait FetchFunctions
      */
     public function fetchSingle(bool $cache = true) : mixed {
         if (!$cache) {
-            return $this->fluent->fetchSingle();
+            return $this->fetchSingleValue();
         }
         try {
             return $this->cache->load(
                 'sql/'.$this->getQueryHash().'/fetchSingle',
-                fn() => $this->fluent->fetchSingle(),
+                fn() => $this->fetchSingleValue(),
                 [
                     Cache::Expire => $this->cacheExpire,
                     Cache::Tags   => $this->getCacheTags(),
                 ]
             );
         } catch (Throwable) {
-            return $this->fluent->fetchSingle();
+            return $this->fetchSingleValue();
         }
     }
 
@@ -111,7 +111,7 @@ trait FetchFunctions
     public function fetchAllDto(string $class, ?int $offset = null, ?int $limit = null, bool $cache = true) : array {
         if (!$cache) {
             /** @phpstan-ignore return.type */
-            return $this->fluent->execute()
+            return $this->execute()
                                 ?->setRowFactory($this->getRowFactory($class))
                                 ?->fetchAll();
         }
@@ -119,7 +119,7 @@ trait FetchFunctions
             /** @phpstan-ignore return.type */
             return $this->cache->load(
                 'sql/'.$this->getQueryHash().'/fetchAll/'.$offset.'/'.$limit.'/'.$class,
-                fn() => $this->fluent->execute()
+                fn() => $this->execute()
                                      ?->setRowFactory($this->getRowFactory($class))
                                      ?->fetchAll(),
                 [
@@ -129,7 +129,7 @@ trait FetchFunctions
             );
         } catch (Throwable) {
             /** @phpstan-ignore return.type */
-            return $this->fluent->execute()
+            return $this->execute()
                                 ?->setRowFactory($this->getRowFactory($class))
                                 ?->fetchAll();
         }
@@ -143,13 +143,13 @@ trait FetchFunctions
     public function fetchAll(?int $offset = null, ?int $limit = null, bool $cache = true) : array {
         if (!$cache) {
             /** @phpstan-ignore return.type */
-            return $this->fluent->fetchAll($offset, $limit);
+            return $this->fetchAllRows($offset, $limit);
         }
         try {
             /** @phpstan-ignore return.type */
             return $this->cache->load(
                 'sql/'.$this->getQueryHash().'/fetchAll/'.$offset.'/'.$limit,
-                fn() => $this->fluent->fetchAll($offset, $limit),
+                fn() => $this->fetchAllRows($offset, $limit),
                 [
                     Cache::Expire => $this->cacheExpire,
                     Cache::Tags   => $this->getCacheTags(),
@@ -157,7 +157,7 @@ trait FetchFunctions
             );
         } catch (Throwable) {
             /** @phpstan-ignore return.type */
-            return $this->fluent->fetchAll($offset, $limit);
+            return $this->fetchAllRows($offset, $limit);
         }
     }
 
@@ -170,7 +170,7 @@ trait FetchFunctions
      */
     public function fetchIteratorDto(string $class, bool $cache = true) : Iterator {
         if (!$cache) {
-            $query = $this->fluent->execute()
+            $query = $this->execute()
                                   ?->setRowFactory($this->getRowFactory($class));
             while ($row = $query?->fetch()) {
                 /** @var T $row */
@@ -208,7 +208,7 @@ trait FetchFunctions
      */
     public function fetchIterator(bool $cache = true) : Iterator {
         if (!$cache) {
-            $query = $this->fluent->execute();
+            $query = $this->execute();
             while ($row = $query?->fetch()) {
                 assert($row instanceof Row);
                 yield $row;
@@ -252,7 +252,7 @@ trait FetchFunctions
     public function fetchAssocDto(string $class, string $assoc, bool $cache = true) : array {
         if (!$cache) {
             /** @phpstan-ignore return.type */
-            return $this->fluent->execute()
+            return $this->execute()
                                 ?->setRowFactory($this->getRowFactory($class))
                                 ?->fetchAssoc($assoc) ?? [];
         }
@@ -260,7 +260,7 @@ trait FetchFunctions
             /** @phpstan-ignore return.type */
             return $this->cache->load(
                 'sql/'.$this->getQueryHash().'/fetchAssoc/'.$assoc,
-                fn() => $this->fluent->execute()
+                fn() => $this->execute()
                                      ?->setRowFactory($this->getRowFactory($class))
                                      ?->fetchAssoc($assoc) ?? [],
                 [
@@ -270,7 +270,7 @@ trait FetchFunctions
             );
         } catch (Throwable) {
             /** @phpstan-ignore return.type */
-            return $this->fluent->execute()
+            return $this->execute()
                                 ?->setRowFactory($this->getRowFactory($class))
                                 ?->fetchAssoc($assoc) ?? [];
         }
@@ -286,13 +286,13 @@ trait FetchFunctions
     public function fetchAssoc(string $assoc, bool $cache = true) : array {
         if (!$cache) {
             /** @phpstan-ignore return.type */
-            return $this->fluent->fetchAssoc($assoc);
+            return $this->fetchAssocRows($assoc);
         }
         try {
             /** @phpstan-ignore return.type */
             return $this->cache->load(
                 'sql/'.$this->getQueryHash().'/fetchAssoc/'.$assoc,
-                fn() => $this->fluent->fetchAssoc($assoc),
+                fn() => $this->fetchAssocRows($assoc),
                 [
                     Cache::Expire => $this->cacheExpire,
                     Cache::Tags   => $this->getCacheTags(),
@@ -300,7 +300,7 @@ trait FetchFunctions
             );
         } catch (Throwable) {
             /** @phpstan-ignore return.type */
-            return $this->fluent->fetchAssoc($assoc);
+            return $this->fetchAssocRows($assoc);
         }
     }
 
@@ -312,13 +312,13 @@ trait FetchFunctions
     public function fetchPairs(?string $key = null, ?string $value = null, bool $cache = true) : array {
         if (!$cache) {
             /** @phpstan-ignore return.type */
-            return $this->fluent->fetchPairs($key, $value);
+            return $this->fetchPairRows($key, $value);
         }
         try {
             /** @phpstan-ignore return.type */
             return $this->cache->load(
                 'sql/'.$this->getQueryHash().'/fetchPairs/'.$key.'/'.$value,
-                fn() => $this->fluent->fetchPairs($key, $value),
+                fn() => $this->fetchPairRows($key, $value),
                 [
                     Cache::Expire => $this->cacheExpire,
                     Cache::Tags   => $this->getCacheTags(),
@@ -326,7 +326,7 @@ trait FetchFunctions
             );
         } catch (Throwable) {
             /** @phpstan-ignore return.type */
-            return $this->fluent->fetchPairs($key, $value);
+            return $this->fetchPairRows($key, $value);
         }
     }
 

@@ -16,6 +16,7 @@ use Lsr\Db\Dibi\Fluent;
 use Lsr\Serializer\Mapper;
 use Lsr\Serializer\Normalizer\DateTimeNormalizer;
 use Lsr\Serializer\Normalizer\DibiRowNormalizer;
+use LogicException;
 use Nette\Caching\Storages\DevNullStorage;
 use PHPUnit\Framework\Attributes\Depends;
 use PHPUnit\Framework\TestCase;
@@ -368,6 +369,26 @@ class DBTest extends TestCase
         self::assertFalse(DB::getConnection()->isConnected());
     }
 
+    public function testForUpdateRejectsUnsupportedSqliteDriver(): void
+    {
+        $this->initSqlite();
+
+        $this->expectException(LogicException::class);
+        $this->expectExceptionMessage('SELECT FOR UPDATE is not supported');
+
+        DB::select('table1')->forUpdate();
+    }
+
+    public function testForUpdateRejectsUnsupportedPdoSqliteDriver(): void
+    {
+        $this->initPdoSqlite();
+
+        $this->expectException(LogicException::class);
+        $this->expectExceptionMessage('SELECT FOR UPDATE is not supported');
+
+        DB::select('table1')->forUpdate();
+    }
+
     public function testPdoConfigBuildsMysqlDsn(): void
     {
         $connection = DB::getMain(
@@ -462,6 +483,19 @@ class DBTest extends TestCase
         self::assertTrue(DB::getConnection()->isConnected());
         DB::close();
         self::assertFalse(DB::getConnection()->isConnected());
+    }
+
+    #[Depends('testInitMysql')]
+    public function testForUpdateMysqlSqlGeneration(): void
+    {
+        $this->initMysql();
+
+        $sql = (string) DB::select('table1')
+                          ->where('id = %i', 1)
+                          ->limit(1)
+                          ->forUpdate();
+
+        self::assertSame('SELECT * FROM `table1` WHERE id = 1 LIMIT 1 FOR UPDATE', $sql);
     }
 
     #[Depends('testInitMysql')]

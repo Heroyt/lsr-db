@@ -14,6 +14,7 @@ use Lsr\Caching\Cache;
 use Lsr\Db\Dibi\Fluent;
 use Lsr\Logging\Logger;
 use Lsr\Serializer\Mapper;
+use LogicException;
 use Throwable;
 
 /**
@@ -314,6 +315,44 @@ final class Connection
             $query->from(...$table);
         }
         return $this->getFluent($query);
+    }
+
+    public function getSelectForUpdateModifier() : ?string {
+        return match ($this->getDriverFamily()) {
+            'mysql', 'mysqli', 'mariadb', 'pgsql', 'postgres', 'postgresql', 'postgre', 'oci', 'oracle' => 'FOR UPDATE',
+            default => null,
+        };
+    }
+
+    public function assertSelectForUpdateSupported() : void {
+        if ($this->getSelectForUpdateModifier() !== null) {
+            return;
+        }
+
+        throw new LogicException(
+            sprintf(
+                'SELECT FOR UPDATE is not supported by the configured "%s" database driver.',
+                $this->getDriverFamily()
+            )
+        );
+    }
+
+    private function getDriverFamily() : string {
+        $driver = strtolower((string) $this->config['driver']);
+        if ($driver !== 'pdo') {
+            return $driver;
+        }
+
+        if (!empty($this->config['pdoDriver'])) {
+            return strtolower((string) $this->config['pdoDriver']);
+        }
+
+        $dsn = strtolower((string) ($this->config['dsn'] ?? ''));
+        if (preg_match('/^([a-z0-9_]+):/', $dsn, $matches) === 1) {
+            return $matches[1];
+        }
+
+        return 'pdo';
     }
 
     /**
