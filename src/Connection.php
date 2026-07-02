@@ -32,10 +32,13 @@ use Throwable;
  *     dsn?: string,
  *     options?: array<array-key, mixed>,
  *     prefix?: string,
+ *     strictSelectForUpdate?: bool,
  * }
  */
 final class Connection
 {
+    public const bool DEFAULT_STRICT_SELECT_FOR_UPDATE = false;
+
     /** @var Config */
     private array $config;
 
@@ -341,6 +344,10 @@ final class Connection
             'mysql', 'mysqli', 'mariadb', 'pgsql', 'postgres', 'postgresql', 'postgre', 'oci', 'oracle' => 'FOR UPDATE',
             default => null,
         };
+    }
+
+    public function isStrictSelectForUpdate() : bool {
+        return $this->config['strictSelectForUpdate'] ?? self::DEFAULT_STRICT_SELECT_FOR_UPDATE;
     }
 
     public function assertSelectForUpdateSupported() : void {

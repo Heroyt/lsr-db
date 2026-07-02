@@ -42,6 +42,7 @@ use RuntimeException;
  *          prefix?: string,
  *          lazy?: string|bool,
  *          options?: array<array-key, mixed>,
+ *          strictSelectForUpdate?: bool,
  *  }
  *
  * @method static void transaction(callable $callback)
@@ -187,6 +188,7 @@ class DB
         if (!empty($config['prefix'])) {
             $options['prefix'] = $config['prefix'];
         }
+        $options['strictSelectForUpdate'] = $config['strictSelectForUpdate'] ?? Connection::DEFAULT_STRICT_SELECT_FOR_UPDATE;
 
         // Instantiate connection
         return new Connection(

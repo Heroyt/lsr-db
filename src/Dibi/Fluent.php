@@ -154,9 +154,8 @@ final class Fluent
     /**
      * Locks selected rows for update until the current transaction is completed.
      *
-     * This modifier is available only for drivers that support the trailing
-     * "FOR UPDATE" locking clause. Unsupported drivers fail before executing
-     * invalid SQL.
+     * Unsupported drivers ignore this modifier unless strictSelectForUpdate is
+     * enabled in the connection config.
      *
      * @return $this
      */
@@ -166,7 +165,9 @@ final class Fluent
             if ($command !== 'SELECT') {
                 throw new LogicException('SELECT FOR UPDATE can only be used with SELECT queries.');
             }
-            $this->connection->assertSelectForUpdateSupported();
+            if ($this->connection->isStrictSelectForUpdate()) {
+                $this->connection->assertSelectForUpdateSupported();
+            }
         }
 
         $this->forUpdate = $enabled;
@@ -196,7 +197,7 @@ final class Fluent
      */
     public function execute(?string $return = null) : Result|int|null {
         $this->assertSelectClauseReady();
-        if (!$this->forUpdate) {
+        if (!$this->isSelectForUpdateActive()) {
             return $this->fluent->execute($return);
         }
 
@@ -227,7 +228,7 @@ final class Fluent
      */
     public function fetchRow() : Row | array | null {
         $this->assertSelectClauseReady();
-        if (!$this->forUpdate) {
+        if (!$this->isSelectForUpdateActive()) {
             return $this->normalizeFetchedRow($this->fluent->fetch());
         }
 
@@ -238,7 +239,7 @@ final class Fluent
 
     public function fetchSingleValue() : mixed {
         $this->assertSelectClauseReady();
-        if (!$this->forUpdate) {
+        if (!$this->isSelectForUpdateActive()) {
             return $this->fluent->fetchSingle();
         }
 
@@ -250,7 +251,7 @@ final class Fluent
      */
     public function fetchAllRows(?int $offset = null, ?int $limit = null) : array {
         $this->assertSelectClauseReady();
-        if (!$this->forUpdate) {
+        if (!$this->isSelectForUpdateActive()) {
             return $this->fluent->fetchAll($offset, $limit);
         }
 
@@ -262,7 +263,7 @@ final class Fluent
      */
     public function fetchAssocRows(string $assoc) : array {
         $this->assertSelectClauseReady();
-        if (!$this->forUpdate) {
+        if (!$this->isSelectForUpdateActive()) {
             return $this->fluent->fetchAssoc($assoc);
         }
 
@@ -274,7 +275,7 @@ final class Fluent
      */
     public function fetchPairRows(?string $key = null, ?string $value = null) : array {
         $this->assertSelectClauseReady();
-        if (!$this->forUpdate) {
+        if (!$this->isSelectForUpdateActive()) {
             return $this->fluent->fetchPairs($key, $value);
         }
 
@@ -308,12 +309,17 @@ final class Fluent
         return !empty($clauses[$name]);
     }
 
+    private function isSelectForUpdateActive() : bool {
+        return $this->forUpdate && $this->connection->getSelectForUpdateModifier() !== null;
+    }
+
     /**
      * @param  list<mixed>  $exportArgs
      */
     private function getSql(array $exportArgs = []) : string {
         $this->assertSelectClauseReady();
-        if (!$this->forUpdate && $exportArgs === []) {
+        $forUpdateActive = $this->isSelectForUpdateActive();
+        if (!$forUpdateActive && $exportArgs === []) {
             return $this->fluent->__toString();
         }
 
@@ -331,14 +337,12 @@ final class Fluent
         $query = $export(null, $exportArgs);
         $sql = $this->fluent->getConnection()->translate($query);
 
-        if (!$this->forUpdate) {
+        if (!$forUpdateActive) {
             return $sql;
         }
 
         $modifier = $this->connection->getSelectForUpdateModifier();
-        if ($modifier === null) {
-            throw new LogicException('SELECT FOR UPDATE is not supported by the configured database driver.');
-        }
+        assert($modifier !== null);
         return $sql.' '.$modifier;
     }
 

@@ -193,23 +193,32 @@ class DBTest extends TestCase
         $this->assertCount(0, $rows);
     }
 
-    public function initSqlite() : void {
+    /**
+     * @param array<string, mixed> $config
+     */
+    public function initSqlite(array $config = []) : void {
         $fileName = uniqid('', true).'.db';
         DB::init(
             DB::getMain(
                 $this->cache,
                 $this->mapper,
-                [
-                    'database' => ROOT."tests/tmp/$fileName",
-                    'driver'   => "sqlite",
-                    'prefix'   => "",
-                ]
+                array_merge(
+                    [
+                        'database' => ROOT."tests/tmp/$fileName",
+                        'driver'   => "sqlite",
+                        'prefix'   => "",
+                    ],
+                    $config
+                )
             )
         );
         $this->initSqliteTable();
     }
 
-    public function initPdoSqlite(): void
+    /**
+     * @param array<string, mixed> $config
+     */
+    public function initPdoSqlite(array $config = []): void
     {
         if (!extension_loaded('pdo_sqlite')) {
             self::markTestSkipped('PDO SQLite extension is not available.');
@@ -220,12 +229,15 @@ class DBTest extends TestCase
             DB::getMain(
                 $this->cache,
                 $this->mapper,
-                [
-                    'database' => ROOT . "tests/tmp/$fileName",
-                    'driver' => 'pdo',
-                    'pdoDriver' => 'sqlite',
-                    'prefix' => '',
-                ]
+                array_merge(
+                    [
+                        'database' => ROOT . "tests/tmp/$fileName",
+                        'driver' => 'pdo',
+                        'pdoDriver' => 'sqlite',
+                        'prefix' => '',
+                    ],
+                    $config
+                )
             )
         );
         $this->initSqliteTable();
@@ -369,9 +381,27 @@ class DBTest extends TestCase
         self::assertFalse(DB::getConnection()->isConnected());
     }
 
-    public function testForUpdateRejectsUnsupportedSqliteDriver(): void
+    public function testForUpdateIgnoresUnsupportedSqliteDriverByDefault(): void
     {
         $this->initSqlite();
+
+        $sql = (string) DB::select('table1')->forUpdate();
+
+        self::assertSame('SELECT * FROM [table1]', $sql);
+    }
+
+    public function testForUpdateIgnoresUnsupportedPdoSqliteDriverByDefault(): void
+    {
+        $this->initPdoSqlite();
+
+        $sql = (string) DB::select('table1')->forUpdate();
+
+        self::assertSame('SELECT * FROM [table1]', $sql);
+    }
+
+    public function testForUpdateRejectsUnsupportedSqliteDriverInStrictMode(): void
+    {
+        $this->initSqlite(['strictSelectForUpdate' => true]);
 
         $this->expectException(LogicException::class);
         $this->expectExceptionMessage('SELECT FOR UPDATE is not supported');
@@ -379,9 +409,9 @@ class DBTest extends TestCase
         DB::select('table1')->forUpdate();
     }
 
-    public function testForUpdateRejectsUnsupportedPdoSqliteDriver(): void
+    public function testForUpdateRejectsUnsupportedPdoSqliteDriverInStrictMode(): void
     {
-        $this->initPdoSqlite();
+        $this->initPdoSqlite(['strictSelectForUpdate' => true]);
 
         $this->expectException(LogicException::class);
         $this->expectExceptionMessage('SELECT FOR UPDATE is not supported');
