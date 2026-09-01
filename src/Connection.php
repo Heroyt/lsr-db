@@ -8,14 +8,19 @@ use Dibi\Connection as DibiConnection;
 use Dibi\DriverException;
 use Dibi\Drivers\SqliteDriver;
 use Dibi\Exception;
+use Dibi\Event;
 use Dibi\Result;
 use JetBrains\PhpStorm\Language;
 use Lsr\Caching\Cache;
 use Lsr\Db\Dibi\Fluent;
+use Lsr\Db\Lifecycle\DatabaseLifecycleEvent;
+use Lsr\Db\Lifecycle\DatabaseLifecycleHookInterface;
 use Lsr\Logging\Logger;
 use Lsr\Serializer\Mapper;
 use LogicException;
+use ReflectionProperty;
 use Throwable;
+use WeakMap;
 
 /**
  * @phpstan-type Config array{
@@ -46,15 +51,51 @@ final class Connection
 
     /** @var string[] */
     private array $transactionSavepoints = [];
+    /** @var WeakMap<object, DatabaseLifecycleHookInterface>|null */
+    private static ?WeakMap $lifecycleHooks = null;
+    /** @var WeakMap<object, bool>|null */
+    private static ?WeakMap $lifecycleListeners = null;
+    /** @var WeakMap<object, bool>|null */
+    private static ?WeakMap $lifecycleRawSql = null;
+
 
     public DibiConnection $connection {
         get {
             if (!isset($this->connection)) {
-                $this->connection = new DibiConnection($this->config, $this->name);
+                $startedAt = $this->lifecycleHook() !== null ? hrtime(true) : null;
+                try {
+                    $this->connection = new DibiConnection($this->config, $this->name);
+                } catch (Throwable $exception) {
+                    if ($startedAt !== null) {
+                        $this->recordLifecycle(
+                            new DatabaseLifecycleEvent(
+                                DatabaseLifecycleEvent::CONNECT,
+                                DatabaseLifecycleEvent::ERROR,
+                                (hrtime(true) - $startedAt) / 1_000_000_000,
+                                $this->databaseSystem(),
+                                $this->name,
+                                errorType: $exception::class,
+                            )
+                        );
+                    }
+                    throw $exception;
+                }
                 if (!empty($this->config['prefix'])) {
                     $this->connection->getSubstitutes()->__set('', $this->config['prefix']);
                 }
                 $this->connection->onEvent[] = [$this->logger, 'logDb'];
+                $this->registerLifecycleListener();
+                if ($startedAt !== null && empty($this->config['lazy'])) {
+                    $this->recordLifecycle(
+                        new DatabaseLifecycleEvent(
+                            DatabaseLifecycleEvent::CONNECT,
+                            DatabaseLifecycleEvent::SUCCESS,
+                            (hrtime(true) - $startedAt) / 1_000_000_000,
+                            $this->databaseSystem(),
+                            $this->name,
+                        )
+                    );
+                }
             }
             return $this->connection;
         }
@@ -87,6 +128,17 @@ final class Connection
         if (isset($sqliteFile) && !file_exists($sqliteFile)) {
             touch($sqliteFile);
         }
+    }
+
+    public function setLifecycleHook(DatabaseLifecycleHookInterface $hook, bool $includeRawSql = false): static {
+        self::$lifecycleHooks ??= new WeakMap();
+        self::$lifecycleHooks[$this] = $hook;
+        self::$lifecycleRawSql ??= new WeakMap();
+        self::$lifecycleRawSql[$this] = $includeRawSql;
+        if ((new ReflectionProperty($this, 'connection'))->isInitialized($this)) {
+            $this->registerLifecycleListener();
+        }
+        return $this;
     }
 
     /**
@@ -584,6 +636,83 @@ final class Connection
             is_float($value)                    => '%f',
             $value instanceof DateTimeInterface => '%dt',
             default                             => '%s',
+        };
+    }
+
+    private function registerLifecycleListener(): void {
+        if ($this->lifecycleHook() === null || (self::$lifecycleListeners[$this] ?? false)) {
+            return;
+        }
+        $this->connection->onEvent[] = fn(Event $event) => $this->recordDibiEvent($event);
+        self::$lifecycleListeners ??= new WeakMap();
+        self::$lifecycleListeners[$this] = true;
+    }
+
+    private function recordDibiEvent(Event $event): void {
+        $errorType = $event->result instanceof DriverException ? $event->result::class : null;
+        $this->recordLifecycle(
+            new DatabaseLifecycleEvent(
+                $this->databaseOperation($event->type),
+                $errorType === null ? DatabaseLifecycleEvent::SUCCESS : DatabaseLifecycleEvent::ERROR,
+                max(0.0, $event->time),
+                $this->databaseSystem(),
+                $this->name,
+                $event->count,
+                $errorType,
+                $this->includeRawSql() && $event->sql !== '' ? $event->sql : null,
+            )
+        );
+    }
+
+    private function recordLifecycle(DatabaseLifecycleEvent $event): void {
+        $hook = $this->lifecycleHook();
+        if ($hook === null) {
+            return;
+        }
+        try {
+            $hook->record($event);
+        } catch (Throwable) {
+            // Lifecycle hooks must never affect database operations.
+        }
+    }
+
+    private function lifecycleHook(): ?DatabaseLifecycleHookInterface {
+        return self::$lifecycleHooks[$this] ?? null;
+    }
+
+    private function includeRawSql(): bool {
+        return self::$lifecycleRawSql[$this] ?? false;
+    }
+
+    private function databaseOperation(int $type): string {
+        return match ($type) {
+            Event::CONNECT => DatabaseLifecycleEvent::CONNECT,
+            Event::SELECT => DatabaseLifecycleEvent::SELECT,
+            Event::INSERT => DatabaseLifecycleEvent::INSERT,
+            Event::UPDATE => DatabaseLifecycleEvent::UPDATE,
+            Event::DELETE => DatabaseLifecycleEvent::DELETE,
+            Event::BEGIN => DatabaseLifecycleEvent::BEGIN,
+            Event::COMMIT => DatabaseLifecycleEvent::COMMIT,
+            Event::ROLLBACK => DatabaseLifecycleEvent::ROLLBACK,
+            default => DatabaseLifecycleEvent::QUERY,
+        };
+    }
+
+    private function databaseSystem(): string {
+        $driver = strtolower((string) $this->config['driver']);
+        if ($driver === 'pdo') {
+            $driver = strtolower((string) ($this->config['pdoDriver'] ?? ''));
+            if ($driver === '') {
+                $driver = strtolower(strstr((string) ($this->config['dsn'] ?? ''), ':', true) ?: 'pdo');
+            }
+        }
+        return match ($driver) {
+            'mysql', 'mysqli' => 'mysql',
+            'pgsql', 'postgre', 'postgres', 'postgresql' => 'postgresql',
+            'sqlite', 'sqlite3' => 'sqlite',
+            'sqlsrv', 'mssql' => 'mssql',
+            'oci', 'oracle' => 'oracle',
+            default => 'other_sql',
         };
     }
 
