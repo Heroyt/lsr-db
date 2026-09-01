@@ -14,10 +14,12 @@ use Lsr\Db\Connection;
 use Lsr\Db\DB;
 use Lsr\Db\Dibi\Fluent;
 use Lsr\Serializer\Mapper;
+use InvalidArgumentException;
 use Lsr\Serializer\Normalizer\DateTimeNormalizer;
 use Lsr\Serializer\Normalizer\DibiRowNormalizer;
 use LogicException;
 use Nette\Caching\Storages\DevNullStorage;
+use Nette\Caching\Storages\MemoryStorage;
 use PHPUnit\Framework\Attributes\Depends;
 use PHPUnit\Framework\TestCase;
 use RuntimeException;
@@ -42,6 +44,7 @@ class DBTest extends TestCase
     public function tearDown() : void {
         $this->dropTable();
         DB::close();
+        DB::resetConnections();
         $files = glob(TMP_DIR.'*.db');
         if (is_array($files)) {
             foreach ($files as $file) {
@@ -264,6 +267,31 @@ class DBTest extends TestCase
         );
     }
 
+    private function createSqliteConnection(?string $name = null, ?Cache $cache = null) : Connection {
+        $fileName = uniqid('', true).'.db';
+        $connection = DB::createConnection(
+            $cache ?? $this->cache,
+            $this->mapper,
+            [
+                'database' => ROOT."tests/tmp/$fileName",
+                'driver'   => "sqlite",
+                'prefix'   => "",
+            ],
+            $name
+        );
+        $connection->query(
+            "
+			CREATE TABLE table1 (
+			    id integer PRIMARY KEY autoincrement NOT NULL ,
+			    name char(60) NOT NULL,
+			    age int
+			);
+		"
+        );
+
+        return $connection;
+    }
+
     #[Depends('testInitMysql')]
     public function testInsertMultiple() : void {
         $this->initMysql();
@@ -379,6 +407,159 @@ class DBTest extends TestCase
         self::assertTrue(DB::getConnection()->isConnected());
         DB::close();
         self::assertFalse(DB::getConnection()->isConnected());
+    }
+
+    public function testCreateConnectionUsesExplicitTestConfig(): void
+    {
+        $connection = $this->createSqliteConnection('test');
+        $connection->insert('table1', ['name' => 'test', 'age' => null]);
+
+        self::assertSame(1, $connection->select('table1', 'count(*)')->fetchSingle());
+    }
+
+    public function testNamedConnectionCanBecomeActiveConnection(): void
+    {
+        $connection = $this->createSqliteConnection();
+
+        DB::initNamed('test', $connection);
+        DB::useConnection('test');
+
+        self::assertSame($connection, DB::getConnection());
+        self::assertSame($connection, DB::getConnection('test'));
+    }
+
+    public function testMainNamedConnectionStaysActiveAndRegistered(): void
+    {
+        $connection = $this->createSqliteConnection('main');
+
+        DB::initNamed('main', $connection);
+
+        self::assertSame($connection, DB::getConnection());
+        self::assertSame($connection, DB::getConnection('main'));
+    }
+
+    public function testEmptyConnectionNameIsRejected(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('Database connection name cannot be empty');
+
+        DB::initNamed('', $this->createSqliteConnection('test'));
+    }
+
+    public function testUnknownNamedConnectionIsRejected(): void
+    {
+        $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessage('Database connection "missing" is not initialized');
+
+        DB::getConnection('missing');
+    }
+
+    public function testWithConnectionRestoresPreviousStaticConnection(): void
+    {
+        $this->initSqlite();
+        DB::insert('table1', ['name' => 'main', 'age' => null]);
+        $mainConnection = DB::getConnection();
+        $testConnection = $this->createSqliteConnection('test');
+        DB::initNamed('test', $testConnection);
+
+        $count = DB::withConnection(
+            'test',
+            static function () : int {
+                DB::insert('table1', ['name' => 'test', 'age' => null]);
+                return (int) DB::select('table1', 'count(*)')->fetchSingle();
+            }
+        );
+
+        self::assertSame(1, $count);
+        self::assertSame($mainConnection, DB::getConnection());
+        self::assertSame(1, DB::select('table1', 'count(*)')->fetchSingle());
+        self::assertSame(0, DB::select('table1', 'count(*)')->where('name = %s', 'test')->fetchSingle());
+    }
+
+    public function testWithConnectionRestoresPreviousConnectionAfterException(): void
+    {
+        $this->initSqlite();
+        $mainConnection = DB::getConnection();
+        DB::initNamed('test', $this->createSqliteConnection('test'));
+
+        try {
+            DB::withConnection(
+                'test',
+                static function () : never {
+                    throw new RuntimeException('Test failure');
+                }
+            );
+            self::fail('Expected scoped callback to throw');
+        } catch (RuntimeException $exception) {
+            self::assertSame('Test failure', $exception->getMessage());
+        }
+
+        self::assertSame($mainConnection, DB::getConnection());
+    }
+
+    public function testWithConnectionRestoresUninitializedState(): void
+    {
+        DB::resetConnections();
+        $testConnection = $this->createSqliteConnection('test');
+
+        self::assertSame(
+            $testConnection,
+            DB::withConnection($testConnection, static fn() : Connection => DB::getConnection())
+        );
+
+        $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessage('Database is not initialized');
+        DB::getConnection();
+    }
+
+    public function testWithConnectionSupportsNestedScopes(): void
+    {
+        $this->initSqlite();
+        $mainConnection = DB::getConnection();
+        $firstConnection = $this->createSqliteConnection('first');
+        $secondConnection = $this->createSqliteConnection('second');
+        DB::initNamed('first', $firstConnection);
+        DB::initNamed('second', $secondConnection);
+
+        DB::withConnection(
+            'first',
+            static function () use ($firstConnection, $secondConnection) : void {
+                self::assertSame($firstConnection, DB::getConnection());
+                DB::withConnection(
+                    'second',
+                    static fn() => self::assertSame($secondConnection, DB::getConnection())
+                );
+                self::assertSame($firstConnection, DB::getConnection());
+            }
+        );
+
+        self::assertSame($mainConnection, DB::getConnection());
+    }
+
+    public function testResetConnectionsClearsActiveAndNamedConnections(): void
+    {
+        $connection = $this->createSqliteConnection('test');
+        DB::initNamed('test', $connection);
+        DB::useConnection('test');
+
+        DB::resetConnections();
+
+        $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessage('Database connection "test" is not initialized');
+        DB::getConnection('test');
+    }
+
+    public function testNamedConnectionsWithSameNameUseSeparateQueryCaches(): void
+    {
+        $cache = new Cache(new MemoryStorage());
+        $firstConnection = $this->createSqliteConnection('test', $cache);
+        $secondConnection = $this->createSqliteConnection('test', $cache);
+        $firstConnection->insert('table1', ['name' => 'first', 'age' => null]);
+        $secondConnection->insert('table1', ['name' => 'second', 'age' => null]);
+
+        self::assertSame('first', $firstConnection->select('table1', 'name')->fetchSingle());
+        self::assertSame('second', $secondConnection->select('table1', 'name')->fetchSingle());
+        self::assertSame('first', $firstConnection->select('table1', 'name')->fetchSingle());
     }
 
     public function testForUpdateIgnoresUnsupportedSqliteDriverByDefault(): void
