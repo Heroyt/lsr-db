@@ -65,6 +65,7 @@ final class Fluent
         private readonly Cache $cache,
         private readonly Mapper $mapper,
         private(set) string|int $cacheExpire = self::DEFAULT_CACHE_EXPIRE,
+        private readonly ?string $cacheNamespace = null,
     ) {}
 
     /**
@@ -133,7 +134,11 @@ final class Fluent
 
     private function getQueryHash() : string {
         if (!isset($this->queryHash)) {
-            $this->queryHash = md5($this->__toString());
+            $query = $this->__toString();
+            if ($this->cacheNamespace !== null && $this->cacheNamespace !== '' && $this->cacheNamespace !== 'main') {
+                $query = $this->cacheNamespace . "\0" . $query;
+            }
+            $this->queryHash = md5($query);
         }
         return $this->queryHash;
     }

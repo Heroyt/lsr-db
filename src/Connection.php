@@ -42,6 +42,8 @@ final class Connection
     /** @var Config */
     private array $config;
 
+    private readonly ?string $cacheNamespace;
+
     /** @var string[] */
     private array $transactionSavepoints = [];
 
@@ -78,6 +80,9 @@ final class Connection
     ) {
         /** @var Config $config */
         $this->config = $this->normalizeConfig($config);
+        $this->cacheNamespace = $name === 'main'
+            ? null
+            : hash('sha256', serialize([$name, $this->config]));
         $sqliteFile = $this->getSqliteFilePath();
         if (isset($sqliteFile) && !file_exists($sqliteFile)) {
             touch($sqliteFile);
@@ -386,7 +391,13 @@ final class Connection
      * @return Fluent
      */
     public function getFluent(\Dibi\Fluent $query) : Fluent {
-        return new Fluent($query, $this, $this->cache, $this->mapper);
+        return new Fluent(
+            $query,
+            $this,
+            $this->cache,
+            $this->mapper,
+            cacheNamespace: $this->cacheNamespace
+        );
     }
 
     /**

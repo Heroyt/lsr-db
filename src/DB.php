@@ -13,6 +13,7 @@ namespace Lsr\Db;
 
 use Dibi\Helpers;
 use Dibi\Result;
+use InvalidArgumentException;
 use Lsr\Caching\Cache;
 use Lsr\Db\Dibi\Fluent;
 use Lsr\Serializer\Mapper;
@@ -44,6 +45,7 @@ use RuntimeException;
  *          options?: array<array-key, mixed>,
  *          strictSelectForUpdate?: bool,
  *  }
+ * @phpstan-import-type Config from Connection as ConnectionConfig
  *
  * @method static void transaction(callable $callback)
  * @method static void begin(string|null $savepoint=null)
@@ -67,12 +69,75 @@ class DB
 {
 
     /**
-     * @var Connection $db Dibi Database connection
+     * @var Connection|null $db Dibi Database connection
      */
-    protected static Connection $db;
+    protected static ?Connection $db = null;
+
+    /** @var array<string, Connection> */
+    protected static array $connections = [];
 
     public static function init(Connection $db) : void {
         self::$db = $db;
+        self::$connections['main'] = $db;
+    }
+
+    /**
+     * Registers a connection without changing the active connection.
+     *
+     * The reserved "main" name initializes and activates the main connection.
+     *
+     * @param non-empty-string $name
+     */
+    public static function initNamed(string $name, Connection $db) : void {
+        self::assertConnectionName($name);
+        if ($name === 'main') {
+            self::init($db);
+            return;
+        }
+
+        self::$connections[$name] = $db;
+    }
+
+    /**
+     * Makes a registered connection the process-global active connection.
+     *
+     * Prefer withConnection() outside application bootstrap.
+     *
+     * @param non-empty-string $name
+     */
+    public static function useConnection(string $name) : void {
+        self::$db = self::getConnection($name);
+    }
+
+    /**
+     * Temporarily replaces the active static connection and restores the previous
+     * connection after the callback finishes.
+     *
+     * The callback must finish synchronously. Static connection selection is
+     * process-global and must not span a Fiber suspension or another concurrent
+     * unit of work.
+     *
+     * @template T
+     * @param callable():T $callback
+     * @return T
+     */
+    public static function withConnection(Connection|string $connection, callable $callback) : mixed {
+        $previous = self::$db;
+        self::$db = is_string($connection) ? self::getConnection($connection) : $connection;
+
+        try {
+            return $callback();
+        } finally {
+            self::$db = $previous;
+        }
+    }
+
+    /**
+     * Clears the connection registry without closing connection objects.
+     */
+    public static function resetConnections() : void {
+        self::$connections = [];
+        self::$db = null;
     }
 
     /**
@@ -86,11 +151,6 @@ class DB
         Mapper $mapper,
         array  $config = [],
     ) : Connection {
-        Helpers::alias($config, 'user', 'username');
-        Helpers::alias($config, 'password', 'pass');
-
-        /** @var Config $config */
-
         // Default config from ENV
         if (empty($config)) {
             $driver = getenv('DB_driver');
@@ -152,12 +212,54 @@ class DB
             ];
         }
 
+        return self::createConnection($cache, $mapper, $config, 'main');
+    }
+
+    /**
+     * @param  Cache  $cache
+     * @param  Mapper  $mapper
+     * @param  Config  $config
+     * @param non-empty-string|null $name
+     * @return Connection
+     */
+    public static function createConnection(
+        Cache   $cache,
+        Mapper  $mapper,
+        array   $config,
+        ?string $name = null,
+    ) : Connection {
+        if ($name !== null) {
+            self::assertConnectionName($name);
+        }
+
+        return new Connection(
+            $cache,
+            $mapper,
+            self::buildOptions($config),
+            $name
+        );
+    }
+
+    /**
+     * @param Config $config
+     * @return ConnectionConfig
+     */
+    private static function buildOptions(array $config) : array {
+        Helpers::alias($config, 'user', 'username');
+        Helpers::alias($config, 'password', 'pass');
+
+        /** @var Config $config */
+
+        $driver = $config['driver'] ?? 'mysqli';
+        if ($driver === '') {
+            throw new RuntimeException('Database driver cannot be empty');
+        }
+
         // Build valid options
         $options = [
             'lazy'   => !empty($config['lazy']),
-            'driver' => $config['driver'] ?? 'mysqli',
+            'driver' => $driver,
         ];
-        assert(!empty($options['driver']));
         if (!empty($config['host'])) {
             $options['host'] = $config['host'];
         }
@@ -188,15 +290,11 @@ class DB
         if (!empty($config['prefix'])) {
             $options['prefix'] = $config['prefix'];
         }
-        $options['strictSelectForUpdate'] = $config['strictSelectForUpdate'] ?? Connection::DEFAULT_STRICT_SELECT_FOR_UPDATE;
+        $options['strictSelectForUpdate'] = isset($config['strictSelectForUpdate'])
+            ? (bool) $config['strictSelectForUpdate']
+            : Connection::DEFAULT_STRICT_SELECT_FOR_UPDATE;
 
-        // Instantiate connection
-        return new Connection(
-            $cache,
-            $mapper,
-            $options,
-            'main'
-        );
+        return $options;
     }
 
     /**
@@ -286,16 +384,31 @@ class DB
 
     /**
      * Get connection class
+     * @param string|null $name
      *
      * @return Connection
      *
      * @since 1.0
      */
-    public static function getConnection() : Connection {
-        if (!isset(self::$db)) {
-            throw new RuntimeException('Database is not initialized');
+    public static function getConnection(?string $name = null) : Connection {
+        if ($name === null) {
+            if (!isset(self::$db)) {
+                throw new RuntimeException('Database is not initialized');
+            }
+            return self::$db;
         }
-        return self::$db;
+
+        self::assertConnectionName($name);
+        if (!isset(self::$connections[$name])) {
+            throw new RuntimeException(sprintf('Database connection "%s" is not initialized', $name));
+        }
+        return self::$connections[$name];
+    }
+
+    private static function assertConnectionName(string $name) : void {
+        if (trim($name) === '') {
+            throw new InvalidArgumentException('Database connection name cannot be empty');
+        }
     }
 
     public static function close() : void {
