@@ -37,9 +37,12 @@ use RuntimeException;
  *          host?: string,
  *          port?: numeric,
  *          user?: string,
+ *          username?: string,
  *          password?: string,
+ *          pass?: string,
  *          database?: string,
  *          collate?: string,
+ *          charset?: string,
  *          prefix?: string,
  *          lazy?: string|bool,
  *          options?: array<array-key, mixed>,
@@ -247,6 +250,7 @@ class DB
     private static function buildOptions(array $config) : array {
         Helpers::alias($config, 'user', 'username');
         Helpers::alias($config, 'password', 'pass');
+        Helpers::alias($config, 'collate', 'charset');
 
         /** @var Config $config */
 
