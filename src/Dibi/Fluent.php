@@ -303,7 +303,6 @@ final class Fluent
 
     private function hasClause(string $name) : bool {
         $property = new ReflectionProperty(DibiFluent::class, 'clauses');
-        $property->setAccessible(true);
         /** @var array<string, mixed> $clauses */
         $clauses = $property->getValue($this->fluent);
         return !empty($clauses[$name]);
