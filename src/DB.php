@@ -47,6 +47,7 @@ use RuntimeException;
  *          lazy?: string|bool,
  *          options?: array<array-key, mixed>,
  *          strictSelectForUpdate?: bool,
+ *          autoReconnect?: bool,
  *  }
  * @phpstan-import-type Config from Connection as ConnectionConfig
  *
@@ -154,6 +155,8 @@ class DB
         Mapper $mapper,
         array  $config = [],
     ) : Connection {
+        // DB_autoReconnect only applies to environment-based initialization.
+        // Explicit configurations opt in with autoReconnect => true instead.
         // Default config from ENV
         if (empty($config)) {
             $driver = getenv('DB_driver');
@@ -212,6 +215,7 @@ class DB
                 'collate'  => $collate,
                 'prefix'   => $prefix,
                 'lazy'     => $lazy,
+                'autoReconnect' => filter_var(getenv('DB_autoReconnect'), FILTER_VALIDATE_BOOL),
             ];
         }
 
@@ -297,6 +301,7 @@ class DB
         $options['strictSelectForUpdate'] = isset($config['strictSelectForUpdate'])
             ? (bool) $config['strictSelectForUpdate']
             : Connection::DEFAULT_STRICT_SELECT_FOR_UPDATE;
+        $options['autoReconnect'] = $config['autoReconnect'] ?? false;
 
         return $options;
     }

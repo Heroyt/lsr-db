@@ -203,6 +203,7 @@ final class Fluent
     public function execute(?string $return = null) : Result|int|null {
         $this->assertSelectClauseReady();
         if (!$this->isSelectForUpdateActive()) {
+            $this->connection->ensureConnected();
             return $this->fluent->execute($return);
         }
 
@@ -234,6 +235,7 @@ final class Fluent
     public function fetchRow() : Row | array | null {
         $this->assertSelectClauseReady();
         if (!$this->isSelectForUpdateActive()) {
+            $this->connection->ensureConnected();
             return $this->normalizeFetchedRow($this->fluent->fetch());
         }
 
@@ -245,6 +247,7 @@ final class Fluent
     public function fetchSingleValue() : mixed {
         $this->assertSelectClauseReady();
         if (!$this->isSelectForUpdateActive()) {
+            $this->connection->ensureConnected();
             return $this->fluent->fetchSingle();
         }
 
@@ -257,6 +260,7 @@ final class Fluent
     public function fetchAllRows(?int $offset = null, ?int $limit = null) : array {
         $this->assertSelectClauseReady();
         if (!$this->isSelectForUpdateActive()) {
+            $this->connection->ensureConnected();
             return $this->fluent->fetchAll($offset, $limit);
         }
 
@@ -269,6 +273,7 @@ final class Fluent
     public function fetchAssocRows(string $assoc) : array {
         $this->assertSelectClauseReady();
         if (!$this->isSelectForUpdateActive()) {
+            $this->connection->ensureConnected();
             return $this->fluent->fetchAssoc($assoc);
         }
 
@@ -281,6 +286,7 @@ final class Fluent
     public function fetchPairRows(?string $key = null, ?string $value = null) : array {
         $this->assertSelectClauseReady();
         if (!$this->isSelectForUpdateActive()) {
+            $this->connection->ensureConnected();
             return $this->fluent->fetchPairs($key, $value);
         }
 
@@ -435,6 +441,9 @@ final class Fluent
      * @return $this|mixed
      */
     public function __call($name, $arguments) {
+        if (strtolower($name) === 'getiterator') {
+            $this->connection->ensureConnected();
+        }
         $arguments = $this->transformArgs($arguments);
         $return = $this->fluent->$name(...$arguments);
         if ($return === $this->fluent) {

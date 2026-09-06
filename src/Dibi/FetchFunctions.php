@@ -38,6 +38,8 @@ trait FetchFunctions
                     Cache::Tags   => $this->getCacheTags(),
                 ]
             );
+        } catch (Exception | \PDOException | \mysqli_sql_exception $exception) {
+            throw $exception;
         } catch (Throwable) {
             /** @phpstan-ignore return.type */
             return $this
@@ -67,6 +69,8 @@ trait FetchFunctions
                     Cache::Tags   => $this->getCacheTags(),
                 ]
             );
+        } catch (Exception | \PDOException | \mysqli_sql_exception $exception) {
+            throw $exception;
         } catch (Throwable) {
             /** @phpstan-ignore return.type */
             return $this->fetchRow();
@@ -92,6 +96,8 @@ trait FetchFunctions
                     Cache::Tags   => $this->getCacheTags(),
                 ]
             );
+        } catch (Exception | \PDOException | \mysqli_sql_exception $exception) {
+            throw $exception;
         } catch (Throwable) {
             return $this->fetchSingleValue();
         }
@@ -127,6 +133,8 @@ trait FetchFunctions
                     Cache::Tags   => $this->getCacheTags(),
                 ]
             );
+        } catch (Exception | \PDOException | \mysqli_sql_exception $exception) {
+            throw $exception;
         } catch (Throwable) {
             /** @phpstan-ignore return.type */
             return $this->execute()
@@ -155,6 +163,8 @@ trait FetchFunctions
                     Cache::Tags   => $this->getCacheTags(),
                 ]
             );
+        } catch (Exception | \PDOException | \mysqli_sql_exception $exception) {
+            throw $exception;
         } catch (Throwable) {
             /** @phpstan-ignore return.type */
             return $this->fetchAllRows($offset, $limit);
@@ -268,6 +278,8 @@ trait FetchFunctions
                     Cache::Tags   => $this->getCacheTags(),
                 ]
             );
+        } catch (Exception | \PDOException | \mysqli_sql_exception $exception) {
+            throw $exception;
         } catch (Throwable) {
             /** @phpstan-ignore return.type */
             return $this->execute()
@@ -298,6 +310,8 @@ trait FetchFunctions
                     Cache::Tags   => $this->getCacheTags(),
                 ]
             );
+        } catch (Exception | \PDOException | \mysqli_sql_exception $exception) {
+            throw $exception;
         } catch (Throwable) {
             /** @phpstan-ignore return.type */
             return $this->fetchAssocRows($assoc);
@@ -324,6 +338,8 @@ trait FetchFunctions
                     Cache::Tags   => $this->getCacheTags(),
                 ]
             );
+        } catch (Exception | \PDOException | \mysqli_sql_exception $exception) {
+            throw $exception;
         } catch (Throwable) {
             /** @phpstan-ignore return.type */
             return $this->fetchPairRows($key, $value);
@@ -340,18 +356,25 @@ trait FetchFunctions
     public function count(bool $cache = true) : int {
         $this->assertSelectClauseReady();
         if (!$cache) {
+            $this->connection->ensureConnected();
             return $this->fluent->count();
         }
         try {
             return $this->cache->load(
                 'sql/'.$this->getQueryHash().'/count',
-                fn() : int => $this->fluent->count(),
+                function () : int {
+                    $this->connection->ensureConnected();
+                    return $this->fluent->count();
+                },
                 [
                     Cache::Expire => $this->cacheExpire,
                     Cache::Tags   => $this->getCacheTags(),
                 ]
             );
+        } catch (Exception | \PDOException | \mysqli_sql_exception $exception) {
+            throw $exception;
         } catch (Throwable) {
+            $this->connection->ensureConnected();
             return $this->fluent->count();
         }
     }
@@ -376,6 +399,8 @@ trait FetchFunctions
                     Cache::Tags   => $this->getCacheTags(),
                 ]
             );
+        } catch (Exception | \PDOException | \mysqli_sql_exception $exception) {
+            throw $exception;
         } catch (Throwable) {
             return !empty($this->connection->query('SELECT EXISTS(%sql)', $this)->fetchSingle());
         }

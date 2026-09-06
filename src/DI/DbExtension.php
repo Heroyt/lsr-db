@@ -34,7 +34,8 @@ use Nette\Schema\Schema;
  *         prefix: string|null,
  *         lazy: bool,
  *         options: array<array-key, mixed>,
- *         strictSelectForUpdate: bool
+ *         strictSelectForUpdate: bool,
+ *         autoReconnect: bool
  *     }>
  * } $config
  */
@@ -62,6 +63,7 @@ final class DbExtension extends CompilerExtension
             'lazy' => Expect::bool()->default(false),
             'options' => Expect::array()->default([]),
             'strictSelectForUpdate' => Expect::bool()->default(Connection::DEFAULT_STRICT_SELECT_FOR_UPDATE),
+            'autoReconnect' => Expect::bool()->default(false),
         ]);
 
         return Expect::structure([

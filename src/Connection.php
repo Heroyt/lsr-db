@@ -6,6 +6,8 @@ namespace Lsr\Db;
 use DateTimeInterface;
 use Dibi\Connection as DibiConnection;
 use Dibi\DriverException;
+use Dibi\Drivers\MySqliDriver;
+use Dibi\Drivers\PdoDriver;
 use Dibi\Drivers\SqliteDriver;
 use Dibi\Exception;
 use Dibi\Event;
@@ -18,6 +20,10 @@ use Lsr\Db\Lifecycle\DatabaseLifecycleHookInterface;
 use Lsr\Logging\Logger;
 use Lsr\Serializer\Mapper;
 use LogicException;
+use mysqli;
+use mysqli_sql_exception;
+use PDO;
+use PDOException;
 use ReflectionProperty;
 use Throwable;
 use WeakMap;
@@ -38,6 +44,7 @@ use WeakMap;
  *     options?: array<array-key, mixed>,
  *     prefix?: string,
  *     strictSelectForUpdate?: bool,
+ *     autoReconnect?: bool,
  * }
  */
 final class Connection
@@ -49,7 +56,7 @@ final class Connection
 
     private readonly ?string $cacheNamespace;
 
-    /** @var string[] */
+    /** @var list<string> */
     private array $transactionSavepoints = [];
     /** @var WeakMap<object, DatabaseLifecycleHookInterface>|null */
     private static ?WeakMap $lifecycleHooks = null;
@@ -257,7 +264,91 @@ final class Connection
      * @return mixed
      */
     public function __call(string $name, array $arguments) : mixed {
+        if (
+            in_array(
+                strtolower($name),
+                ['nativequery', 'fetch', 'fetchall', 'fetchsingle', 'fetchpairs', 'loadfile'],
+                true,
+            )
+        ) {
+            $this->ensureConnected();
+        }
         return $this->connection->$name(...$arguments);
+    }
+
+    /**
+     * Checks an idle MySQL connection before submitting an application statement.
+     *
+     * Opt in with autoReconnect=true. Adds one round trip outside managed
+     * transactions. Only the health check may be retried by reconnecting; an
+     * application statement is never replayed, even if it loses its connection.
+     *
+     * Use begin()/commit()/rollback() for transactions. Raw Dibi/native access,
+     * raw SQL transaction control, and session state (temporary tables, locks,
+     * variables) are outside this guarantee and should not use autoReconnect.
+     *
+     * @internal Used by the package's query execution paths, not result getters.
+     * @throws DriverException
+     */
+    public function ensureConnected(): void {
+        if (empty($this->config['autoReconnect']) || $this->transactionSavepoints !== []) {
+            return;
+        }
+        $connection = $this->connection;
+        if (!$connection->isConnected()) {
+            return;
+        }
+        $driver = $connection->getDriver();
+        try {
+            if ($driver instanceof MySqliDriver) {
+                $resource = $driver->getResource();
+                assert($resource instanceof mysqli);
+                // COM_STATISTICS does not change insert IDs or affected rows.
+                // Unlike mysqli::ping(), stat() is not deprecated in PHP 8.4+.
+                if (@$resource->stat() === false) {
+                    throw new DriverException($resource->error, $resource->errno);
+                }
+            } elseif ($driver instanceof PdoDriver) {
+                $resource = $driver->getResource();
+                assert($resource instanceof PDO);
+                if ($resource->getAttribute(PDO::ATTR_DRIVER_NAME) !== 'mysql' || $resource->inTransaction()) {
+                    return;
+                }
+                // Bypass Dibi so its cached affected-row count is not overwritten.
+                $result = $resource->query('SELECT 1');
+                if ($result === false) {
+                    $error = $resource->errorInfo();
+                    $message = $error[2] ?? null;
+                    $code = $error[1] ?? null;
+                    throw new DriverException(
+                        is_string($message) ? $message : 'MySQL connection health check failed.',
+                        is_int($code) || is_string($code) ? $code : 0,
+                    );
+                }
+                $result->closeCursor();
+            } else {
+                return;
+            }
+        } catch (DriverException | mysqli_sql_exception | PDOException $exception) {
+            if (!$this->isLostConnection($exception)) {
+                throw $exception;
+            }
+            // Keep the Dibi object: existing fluent builders, substitutions and
+            // event listeners must continue to refer to this connection.
+            $connection->disconnect();
+            $connection->connect();
+        }
+    }
+
+    private function isLostConnection(Throwable $exception): bool {
+        if ($exception instanceof PDOException) {
+            $code = $exception->errorInfo[1] ?? $exception->getCode();
+        } elseif ($exception instanceof DriverException || $exception instanceof mysqli_sql_exception) {
+            $code = $exception->getCode();
+        } else {
+            return false;
+        }
+        return in_array($code, [2006, 2013, 2055, '2006', '2013', '2055'], true);
     }
 
     /**
@@ -272,15 +363,17 @@ final class Connection
     public function transaction(callable $callback) : void {
         $this->begin();
         try {
-            $success = $callback($this);
-
+            if ($callback($this)) {
+                $this->commit();
+                return;
+            }
         } catch (Throwable $e) {
-            $this->rollback();
+            try {
+                $this->rollback();
+            } catch (Throwable) {
+                // A dead connection can also fail rollback. Preserve the cause.
+            }
             throw $e;
-        }
-        if ($success) {
-            $this->commit();
-            return;
         }
         $this->rollback();
     }
@@ -292,6 +385,7 @@ final class Connection
      */
     public function begin(?string $savepoint = null) : void {
         if ($this->transactionSavepoints === []) {
+            $this->ensureConnected();
             $this->connection->begin($savepoint);
             $this->transactionSavepoints[] = $savepoint ?? '__transaction__';
             return;
@@ -308,18 +402,30 @@ final class Connection
      * @throws DriverException
      */
     public function rollback(?string $savepoint = null) : void {
-        $currentSavepoint = array_pop($this->transactionSavepoints);
-        if ($currentSavepoint === null) {
-            $this->connection->rollback($savepoint);
-            return;
+        $currentSavepoint = end($this->transactionSavepoints);
+        try {
+            if (count($this->transactionSavepoints) <= 1) {
+                $this->connection->rollback($savepoint);
+                array_pop($this->transactionSavepoints);
+                return;
+            }
+            $this->connection->query('ROLLBACK TO SAVEPOINT %n', $savepoint ?? $currentSavepoint);
+            $this->connection->query('RELEASE SAVEPOINT %n', $savepoint ?? $currentSavepoint);
+            $index = array_search($savepoint ?? $currentSavepoint, $this->transactionSavepoints, true);
+            if ($index !== false) {
+                array_splice($this->transactionSavepoints, $index);
+            }
+        } catch (Throwable $exception) {
+            if ($this->isLostConnection($exception)) {
+                if (!empty($this->config['autoReconnect']) && count($this->transactionSavepoints) <= 1) {
+                    // PDO can retain inTransaction() after a failed rollback.
+                    // Discard only after unwinding the outermost transaction.
+                    $this->connection->disconnect();
+                }
+                array_pop($this->transactionSavepoints);
+            }
+            throw $exception;
         }
-        if ($this->transactionSavepoints === []) {
-            $this->connection->rollback($savepoint);
-            return;
-        }
-
-        $this->connection->query('ROLLBACK TO SAVEPOINT %n', $savepoint ?? $currentSavepoint);
-        $this->connection->query('RELEASE SAVEPOINT %n', $savepoint ?? $currentSavepoint);
     }
 
     /**
@@ -328,23 +434,21 @@ final class Connection
      * @throws DriverException
      */
     public function commit(?string $savepoint = null) : void {
-        $currentSavepoint = array_pop($this->transactionSavepoints);
-        if ($currentSavepoint === null) {
+        $currentSavepoint = end($this->transactionSavepoints);
+        if (count($this->transactionSavepoints) <= 1) {
             $this->connection->commit($savepoint);
-            return;
+        } else {
+            $this->connection->query('RELEASE SAVEPOINT %n', $savepoint ?? $currentSavepoint);
         }
-        if ($this->transactionSavepoints === []) {
-            $this->connection->commit($savepoint);
-            return;
-        }
-
-        $this->connection->query('RELEASE SAVEPOINT %n', $savepoint ?? $currentSavepoint);
+        // A failed commit must not make subsequent work look non-transactional.
+        array_pop($this->transactionSavepoints);
     }
 
     /**
      * @throws Exception
      */
     public function query(#[Language('GenericSQL')] string $query, mixed ...$args): Result {
+        $this->ensureConnected();
         foreach ($args as $key => $arg) {
             if ($arg instanceof Fluent || $arg instanceof \Dibi\Fluent) {
                 $args[$key] = $arg->__toString();
@@ -467,6 +571,7 @@ final class Connection
     public function update(string $table, array $args, ?array $where = null) : Fluent | int {
         $q = $this->connection->update($table, $args);
         if (isset($where)) {
+            $this->ensureConnected();
             /** @var int $rows */
             $rows = $q->where(...$where)->execute(\Dibi\Fluent::AffectedRows);
             return $rows;
@@ -486,6 +591,7 @@ final class Connection
      * @since 1.0
      */
     public function insert(string $table, array ...$args) : int {
+        $this->ensureConnected();
         if (count($args) > 1) {
             $result = $this->connection->command()
                 ->insert()
@@ -528,6 +634,7 @@ final class Connection
      * @throws Exception
      */
     public function insertIgnore(string $table, iterable $args) : int {
+        $this->ensureConnected();
         $query = $this->connection->insert($table, $args);
         if ($this->connection->getDriver() instanceof SqliteDriver) {
             $query->setFlag('OR IGNORE');
@@ -549,6 +656,7 @@ final class Connection
      * @throws Exception
      */
     public function resetAutoIncrement(string $table) : Result {
+        $this->ensureConnected();
         if ($this->config['driver'] === 'sqlite') {
             return $this->connection->query('delete from sqlite_sequence where name=%s;', $table);
         }
@@ -579,6 +687,7 @@ final class Connection
      * @since 1.0
      */
     public function delete(string $table, array $where = []) : int {
+        $this->ensureConnected();
         $query = $this->connection->delete($table);
         if (!empty($where)) {
             $query->where(...$where);
@@ -596,6 +705,7 @@ final class Connection
      * @throws Exception
      */
     public function replace(string $table, array $values) : int {
+        $this->ensureConnected();
         $multiple = array_any($values, static fn($val) => is_array($val));
 
         $args = [];
@@ -725,9 +835,13 @@ final class Connection
     }
 
     public function close() : void {
-        if ($this->connection->isConnected()) {
+        if (
+            (new ReflectionProperty($this, 'connection'))->isInitialized($this)
+            && $this->connection->isConnected()
+        ) {
             $this->connection->disconnect();
         }
+        $this->transactionSavepoints = [];
     }
 
 }
