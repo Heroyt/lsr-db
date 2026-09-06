@@ -315,17 +315,21 @@ class DBTest extends TestCase
     }
 
     public function initMysql() : void {
+        $port = getenv('LSR_DB_TEST_PORT');
+        if ($port === false || $port === '') {
+            self::markTestSkipped('Set LSR_DB_TEST_PORT to an isolated MySQL integration server.');
+        }
         DB::init(
             DB::getMain(
                 $this->cache,
                 $this->mapper,
                 [
                     'driver'   => 'mysqli',
-                    'hosts'    => 'localhost',
-                    'port'     => 3306,
+                    'host'     => '127.0.0.1',
+                    'port'     => (int) $port,
                     'user'     => 'root',
                     'password' => '',
-                    'database' => 'test',
+                    'database' => 'reconnect_test',
                     'collate'  => 'utf8mb4',
                 ]
             )
