@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 namespace Lsr\Db;
@@ -9,17 +10,17 @@ use Dibi\DriverException;
 use Dibi\Drivers\MySqliDriver;
 use Dibi\Drivers\PdoDriver;
 use Dibi\Drivers\SqliteDriver;
-use Dibi\Exception;
 use Dibi\Event;
+use Dibi\Exception;
 use Dibi\Result;
 use JetBrains\PhpStorm\Language;
+use LogicException;
 use Lsr\Caching\Cache;
 use Lsr\Db\Dibi\Fluent;
 use Lsr\Db\Lifecycle\DatabaseLifecycleEvent;
 use Lsr\Db\Lifecycle\DatabaseLifecycleHookInterface;
 use Lsr\Logging\Logger;
 use Lsr\Serializer\Mapper;
-use LogicException;
 use mysqli;
 use mysqli_sql_exception;
 use PDO;
@@ -68,7 +69,7 @@ final class Connection
 
     public DibiConnection $connection {
         get {
-            if (!isset($this->connection)) {
+            if ( ! isset($this->connection)) {
                 $startedAt = $this->lifecycleHook() !== null ? hrtime(true) : null;
                 try {
                     $this->connection = new DibiConnection($this->config, $this->name);
@@ -82,12 +83,12 @@ final class Connection
                                 $this->databaseSystem(),
                                 $this->name,
                                 errorType: $exception::class,
-                            )
+                            ),
                         );
                     }
                     throw $exception;
                 }
-                if (!empty($this->config['prefix'])) {
+                if ( ! empty($this->config['prefix'])) {
                     $this->connection->getSubstitutes()->__set('', $this->config['prefix']);
                 }
                 $this->connection->onEvent[] = [$this->logger, 'logDb'];
@@ -100,7 +101,7 @@ final class Connection
                             (hrtime(true) - $startedAt) / 1_000_000_000,
                             $this->databaseSystem(),
                             $this->name,
-                        )
+                        ),
                     );
                 }
             }
@@ -110,7 +111,7 @@ final class Connection
 
     private Logger $logger {
         get {
-            if (!isset($this->logger)) {
+            if ( ! isset($this->logger)) {
                 $this->logger = new Logger(LOG_DIR, 'db');
             }
             return $this->logger;
@@ -132,7 +133,7 @@ final class Connection
             ? null
             : hash('sha256', serialize([$name, $this->config]));
         $sqliteFile = $this->getSqliteFilePath();
-        if (isset($sqliteFile) && !file_exists($sqliteFile)) {
+        if (isset($sqliteFile) && ! file_exists($sqliteFile)) {
             touch($sqliteFile);
         }
     }
@@ -152,8 +153,7 @@ final class Connection
      * @param Config $config
      * @return Config
      */
-    private function normalizeConfig(array $config): array
-    {
+    private function normalizeConfig(array $config): array {
         $driver = strtolower($config['driver']);
         if (str_starts_with($driver, 'pdo_') || str_starts_with($driver, 'pdo-')) {
             $config['pdoDriver'] ??= substr($driver, 4);
@@ -161,7 +161,7 @@ final class Connection
             $driver = 'pdo';
         }
 
-        if ($driver !== 'pdo' || !empty($config['dsn'])) {
+        if ($driver !== 'pdo' || ! empty($config['dsn'])) {
             return $config;
         }
 
@@ -174,7 +174,7 @@ final class Connection
                     'host' => $config['host'] ?? null,
                     'port' => $config['port'] ?? null,
                     'dbname' => $config['database'] ?? null,
-                ]
+                ],
             ),
             'sqlsrv' => $this->buildPdoSqlsrvDsn($config),
             'mysql', 'mariadb' => $this->buildPdoKvDsn(
@@ -184,7 +184,7 @@ final class Connection
                     'port' => $config['port'] ?? null,
                     'dbname' => $config['database'] ?? null,
                     'charset' => $config['collate'] ?? null,
-                ]
+                ],
             ),
             default => $this->buildPdoKvDsn(
                 $pdoDriver,
@@ -192,7 +192,7 @@ final class Connection
                     'host' => $config['host'] ?? null,
                     'port' => $config['port'] ?? null,
                     'dbname' => $config['database'] ?? null,
-                ]
+                ],
             ),
         };
 
@@ -202,8 +202,7 @@ final class Connection
     /**
      * @param array<string, float|int|string|null> $parts
      */
-    private function buildPdoKvDsn(string $driver, array $parts): string
-    {
+    private function buildPdoKvDsn(string $driver, array $parts): string {
         $segments = [];
         foreach ($parts as $key => $value) {
             if ($value === null || $value === '') {
@@ -217,17 +216,16 @@ final class Connection
     /**
      * @param Config $config
      */
-    private function buildPdoSqlsrvDsn(array $config): string
-    {
+    private function buildPdoSqlsrvDsn(array $config): string {
         $segments = [];
-        if (!empty($config['host'])) {
+        if ( ! empty($config['host'])) {
             $server = $config['host'];
-            if (!empty($config['port'])) {
+            if ( ! empty($config['port'])) {
                 $server .= ',' . (string)$config['port'];
             }
             $segments[] = 'Server=' . $server;
         }
-        if (!empty($config['database'])) {
+        if ( ! empty($config['database'])) {
             $segments[] = 'Database=' . $config['database'];
         }
         return 'sqlsrv:' . implode(';', $segments);
@@ -236,8 +234,7 @@ final class Connection
     /**
      * @return non-empty-string|null
      */
-    private function getSqliteFilePath(): ?string
-    {
+    private function getSqliteFilePath(): ?string {
         if ($this->config['driver'] === 'sqlite') {
             return $this->config['database'] ?? TMP_DIR . 'db.db';
         }
@@ -247,7 +244,7 @@ final class Connection
         }
 
         $dsn = $this->config['dsn'] ?? null;
-        if (!is_string($dsn) || !str_starts_with($dsn, 'sqlite:')) {
+        if ( ! is_string($dsn) || ! str_starts_with($dsn, 'sqlite:')) {
             return null;
         }
 
@@ -263,7 +260,7 @@ final class Connection
      * @param  mixed[]  $arguments
      * @return mixed
      */
-    public function __call(string $name, array $arguments) : mixed {
+    public function __call(string $name, array $arguments): mixed {
         if (
             in_array(
                 strtolower($name),
@@ -295,7 +292,7 @@ final class Connection
             return;
         }
         $connection = $this->connection;
-        if (!$connection->isConnected()) {
+        if ( ! $connection->isConnected()) {
             return;
         }
         $driver = $connection->getDriver();
@@ -330,7 +327,7 @@ final class Connection
                 return;
             }
         } catch (DriverException | mysqli_sql_exception | PDOException $exception) {
-            if (!$this->isLostConnection($exception)) {
+            if ( ! $this->isLostConnection($exception)) {
                 throw $exception;
             }
             // Keep the Dibi object: existing fluent builders, substitutions and
@@ -360,7 +357,7 @@ final class Connection
      * @param  callable(Connection $connection):bool  $callback
      * @throws DriverException|Throwable
      */
-    public function transaction(callable $callback) : void {
+    public function transaction(callable $callback): void {
         $this->begin();
         try {
             if ($callback($this)) {
@@ -383,7 +380,7 @@ final class Connection
      * @return void
      * @throws DriverException
      */
-    public function begin(?string $savepoint = null) : void {
+    public function begin(?string $savepoint = null): void {
         if ($this->transactionSavepoints === []) {
             $this->ensureConnected();
             $this->connection->begin($savepoint);
@@ -401,7 +398,7 @@ final class Connection
      * @return void
      * @throws DriverException
      */
-    public function rollback(?string $savepoint = null) : void {
+    public function rollback(?string $savepoint = null): void {
         $currentSavepoint = end($this->transactionSavepoints);
         try {
             if (count($this->transactionSavepoints) <= 1) {
@@ -417,7 +414,7 @@ final class Connection
             }
         } catch (Throwable $exception) {
             if ($this->isLostConnection($exception)) {
-                if (!empty($this->config['autoReconnect']) && count($this->transactionSavepoints) <= 1) {
+                if ( ! empty($this->config['autoReconnect']) && count($this->transactionSavepoints) <= 1) {
                     // PDO can retain inTransaction() after a failed rollback.
                     // Discard only after unwinding the outermost transaction.
                     $this->connection->disconnect();
@@ -433,7 +430,7 @@ final class Connection
      * @return void
      * @throws DriverException
      */
-    public function commit(?string $savepoint = null) : void {
+    public function commit(?string $savepoint = null): void {
         $currentSavepoint = end($this->transactionSavepoints);
         if (count($this->transactionSavepoints) <= 1) {
             $this->connection->commit($savepoint);
@@ -467,15 +464,14 @@ final class Connection
      *
      * @since 1.0
      */
-    public function select(array | string | null $table = null, ...$args) : Fluent {
+    public function select(array | string | null $table = null, ...$args): Fluent {
         if (empty($args)) {
             $args = ['*'];
         }
         $query = $this->connection->select(...$args);
         if (is_string($table)) {
             $query->from($table);
-        }
-        else if (is_array($table)) {
+        } elseif (is_array($table)) {
             $query->from(...$table);
         }
         return $this->getFluent($query);
@@ -489,29 +485,28 @@ final class Connection
      *
      * @return Fluent
      */
-    public function from(array | string $table, mixed ...$args) : Fluent {
+    public function from(array | string $table, mixed ...$args): Fluent {
         $query = $this->connection->select();
         if (is_string($table)) {
             $query->from($table, ...$args);
-        }
-        else {
+        } else {
             $query->from(...$table);
         }
         return $this->getFluent($query)->requireSelect();
     }
 
-    public function getSelectForUpdateModifier() : ?string {
+    public function getSelectForUpdateModifier(): ?string {
         return match ($this->getDriverFamily()) {
             'mysql', 'mysqli', 'mariadb', 'pgsql', 'postgres', 'postgresql', 'postgre', 'oci', 'oracle' => 'FOR UPDATE',
             default => null,
         };
     }
 
-    public function isStrictSelectForUpdate() : bool {
+    public function isStrictSelectForUpdate(): bool {
         return $this->config['strictSelectForUpdate'] ?? self::DEFAULT_STRICT_SELECT_FOR_UPDATE;
     }
 
-    public function assertSelectForUpdateSupported() : void {
+    public function assertSelectForUpdateSupported(): void {
         if ($this->getSelectForUpdateModifier() !== null) {
             return;
         }
@@ -519,18 +514,18 @@ final class Connection
         throw new LogicException(
             sprintf(
                 'SELECT FOR UPDATE is not supported by the configured "%s" database driver.',
-                $this->getDriverFamily()
-            )
+                $this->getDriverFamily(),
+            ),
         );
     }
 
-    private function getDriverFamily() : string {
+    private function getDriverFamily(): string {
         $driver = strtolower((string) $this->config['driver']);
         if ($driver !== 'pdo') {
             return $driver;
         }
 
-        if (!empty($this->config['pdoDriver'])) {
+        if ( ! empty($this->config['pdoDriver'])) {
             return strtolower((string) $this->config['pdoDriver']);
         }
 
@@ -546,13 +541,13 @@ final class Connection
      * @param  \Dibi\Fluent  $query
      * @return Fluent
      */
-    public function getFluent(\Dibi\Fluent $query) : Fluent {
+    public function getFluent(\Dibi\Fluent $query): Fluent {
         return new Fluent(
             $query,
             $this,
             $this->cache,
             $this->mapper,
-            cacheNamespace: $this->cacheNamespace
+            cacheNamespace: $this->cacheNamespace,
         );
     }
 
@@ -568,7 +563,7 @@ final class Connection
      * @throws Exception
      * @since 1.0
      */
-    public function update(string $table, array $args, ?array $where = null) : Fluent | int {
+    public function update(string $table, array $args, ?array $where = null): Fluent | int {
         $q = $this->connection->update($table, $args);
         if (isset($where)) {
             $this->ensureConnected();
@@ -590,7 +585,7 @@ final class Connection
      *
      * @since 1.0
      */
-    public function insert(string $table, array ...$args) : int {
+    public function insert(string $table, array ...$args): int {
         $this->ensureConnected();
         if (count($args) > 1) {
             $result = $this->connection->command()
@@ -598,7 +593,7 @@ final class Connection
                 ->into('%n', $table, '(%n)', array_keys($args[0]))
                 ->values(
                     '%l' . str_repeat(', %l', count($args) - 1),
-                    ...$args
+                    ...$args,
                 )
                 ->execute(\Dibi\Fluent::AffectedRows);
             assert(is_int($result));
@@ -620,7 +615,7 @@ final class Connection
      *
      * @since 1.0
      */
-    public function insertGet(string $table, iterable $args) : Fluent {
+    public function insertGet(string $table, iterable $args): Fluent {
         return $this->getFluent($this->connection->insert($table, $args));
     }
 
@@ -633,13 +628,12 @@ final class Connection
      * @return int
      * @throws Exception
      */
-    public function insertIgnore(string $table, iterable $args) : int {
+    public function insertIgnore(string $table, iterable $args): int {
         $this->ensureConnected();
         $query = $this->connection->insert($table, $args);
         if ($this->connection->getDriver() instanceof SqliteDriver) {
             $query->setFlag('OR IGNORE');
-        }
-        else {
+        } else {
             $query->setFlag('IGNORE');
         }
         $result = $query->execute(\Dibi\Fluent::AffectedRows);
@@ -655,7 +649,7 @@ final class Connection
      * @return Result
      * @throws Exception
      */
-    public function resetAutoIncrement(string $table) : Result {
+    public function resetAutoIncrement(string $table): Result {
         $this->ensureConnected();
         if ($this->config['driver'] === 'sqlite') {
             return $this->connection->query('delete from sqlite_sequence where name=%s;', $table);
@@ -672,7 +666,7 @@ final class Connection
      *
      * @since 1.0
      */
-    public function deleteGet(string $table) : Fluent {
+    public function deleteGet(string $table): Fluent {
         return $this->getFluent($this->connection->delete($table));
     }
 
@@ -686,10 +680,10 @@ final class Connection
      * @throws Exception
      * @since 1.0
      */
-    public function delete(string $table, array $where = []) : int {
+    public function delete(string $table, array $where = []): int {
         $this->ensureConnected();
         $query = $this->connection->delete($table);
-        if (!empty($where)) {
+        if ( ! empty($where)) {
             $query->where(...$where);
         }
         $result = $query->execute(\Dibi\Fluent::AffectedRows);
@@ -704,9 +698,9 @@ final class Connection
      * @return int
      * @throws Exception
      */
-    public function replace(string $table, array $values) : int {
+    public function replace(string $table, array $values): int {
         $this->ensureConnected();
-        $multiple = array_any($values, static fn($val) => is_array($val));
+        $multiple = array_any($values, static fn ($val) => is_array($val));
 
         $args = [];
         $valueArgs = [];
@@ -722,7 +716,7 @@ final class Connection
                     $row[$key2] = $this->getEscapeType($val);
                     $valueArgs[] = $val;
                 }
-                $rows[] = '('.implode(', ', $row).')';
+                $rows[] = '(' . implode(', ', $row) . ')';
                 continue;
             }
             $queryKeys[$key] = '%n';
@@ -730,17 +724,17 @@ final class Connection
             $row[$key] = $this->getEscapeType($data);
             $valueArgs[] = $data;
         }
-        if (!$multiple) {
-            $rows[] = '('.implode(', ', $row).')';
+        if ( ! $multiple) {
+            $rows[] = '(' . implode(', ', $row) . ')';
         }
         $args = array_merge($args, $valueArgs);
 
         // Split for debugging
-        $sql = "REPLACE INTO %n (".implode(', ', $queryKeys).") VALUES ".implode(', ', $rows).";";
+        $sql = "REPLACE INTO %n (" . implode(', ', $queryKeys) . ") VALUES " . implode(', ', $rows) . ";";
         return $this->connection->query($sql, $table, ...array_values($args))->count();
     }
 
-    private function getEscapeType(mixed $value) : string {
+    private function getEscapeType(mixed $value): string {
         return match (true) {
             is_int($value)                      => '%i',
             is_float($value)                    => '%f',
@@ -753,7 +747,7 @@ final class Connection
         if ($this->lifecycleHook() === null || (self::$lifecycleListeners[$this] ?? false)) {
             return;
         }
-        $this->connection->onEvent[] = fn(Event $event) => $this->recordDibiEvent($event);
+        $this->connection->onEvent[] = fn (Event $event) => $this->recordDibiEvent($event);
         self::$lifecycleListeners ??= new WeakMap();
         self::$lifecycleListeners[$this] = true;
     }
@@ -770,7 +764,7 @@ final class Connection
                 $event->count,
                 $errorType,
                 $this->includeRawSql() && $event->sql !== '' ? $event->sql : null,
-            )
+            ),
         );
     }
 
@@ -826,15 +820,15 @@ final class Connection
         };
     }
 
-    public function getInsertId() : int {
+    public function getInsertId(): int {
         return $this->connection->getInsertId();
     }
 
-    public function getAffectedRows() : int {
+    public function getAffectedRows(): int {
         return $this->connection->getAffectedRows();
     }
 
-    public function close() : void {
+    public function close(): void {
         if (
             (new ReflectionProperty($this, 'connection'))->isInitialized($this)
             && $this->connection->isConnected()

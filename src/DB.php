@@ -1,4 +1,6 @@
 <?php
+
+declare(strict_types=1);
 /**
  * @file      DB.php
  * @brief     Database connection handling
@@ -7,7 +9,6 @@
  * @version   1.0
  * @since     1.0
  */
-
 
 namespace Lsr\Db;
 
@@ -71,7 +72,6 @@ use RuntimeException;
  */
 class DB
 {
-
     /**
      * @var Connection|null $db Dibi Database connection
      */
@@ -80,7 +80,7 @@ class DB
     /** @var array<string, Connection> */
     protected static array $connections = [];
 
-    public static function init(Connection $db) : void {
+    public static function init(Connection $db): void {
         self::$db = $db;
         self::$connections['main'] = $db;
     }
@@ -92,7 +92,7 @@ class DB
      *
      * @param non-empty-string $name
      */
-    public static function initNamed(string $name, Connection $db) : void {
+    public static function initNamed(string $name, Connection $db): void {
         self::assertConnectionName($name);
         if ($name === 'main') {
             self::init($db);
@@ -109,7 +109,7 @@ class DB
      *
      * @param non-empty-string $name
      */
-    public static function useConnection(string $name) : void {
+    public static function useConnection(string $name): void {
         self::$db = self::getConnection($name);
     }
 
@@ -125,7 +125,7 @@ class DB
      * @param callable():T $callback
      * @return T
      */
-    public static function withConnection(Connection|string $connection, callable $callback) : mixed {
+    public static function withConnection(Connection|string $connection, callable $callback): mixed {
         $previous = self::$db;
         self::$db = is_string($connection) ? self::getConnection($connection) : $connection;
 
@@ -139,7 +139,7 @@ class DB
     /**
      * Clears the connection registry without closing connection objects.
      */
-    public static function resetConnections() : void {
+    public static function resetConnections(): void {
         self::$connections = [];
         self::$db = null;
     }
@@ -154,7 +154,7 @@ class DB
         Cache  $cache,
         Mapper $mapper,
         array  $config = [],
-    ) : Connection {
+    ): Connection {
         // DB_autoReconnect only applies to environment-based initialization.
         // Explicit configurations opt in with autoReconnect => true instead.
         // Default config from ENV
@@ -234,7 +234,7 @@ class DB
         Mapper  $mapper,
         array   $config,
         ?string $name = null,
-    ) : Connection {
+    ): Connection {
         if ($name !== null) {
             self::assertConnectionName($name);
         }
@@ -243,7 +243,7 @@ class DB
             $cache,
             $mapper,
             self::buildOptions($config),
-            $name
+            $name,
         );
     }
 
@@ -251,7 +251,7 @@ class DB
      * @param Config $config
      * @return ConnectionConfig
      */
-    private static function buildOptions(array $config) : array {
+    private static function buildOptions(array $config): array {
         Helpers::alias($config, 'user', 'username');
         Helpers::alias($config, 'password', 'pass');
         Helpers::alias($config, 'collate', 'charset');
@@ -265,37 +265,37 @@ class DB
 
         // Build valid options
         $options = [
-            'lazy'   => !empty($config['lazy']),
+            'lazy'   => ! empty($config['lazy']),
             'driver' => $driver,
         ];
-        if (!empty($config['host'])) {
+        if ( ! empty($config['host'])) {
             $options['host'] = $config['host'];
         }
-        if (!empty($config['port'])) {
+        if ( ! empty($config['port'])) {
             $options['port'] = (int) $config['port'];
         }
-        if (!empty($config['user'])) {
+        if ( ! empty($config['user'])) {
             $options['username'] = $config['user'];
         }
-        if (!empty($config['password'])) {
+        if ( ! empty($config['password'])) {
             $options['password'] = $config['password'];
         }
         if ($options['driver'] === 'pdo') {
-            $options['dsn'] = !empty($config['dsn'])
+            $options['dsn'] = ! empty($config['dsn'])
                 ? $config['dsn']
                 : self::buildPdoDsn($config);
             if (isset($config['options'])) {
                 $options['options'] = $config['options'];
             }
         } else {
-            if (!empty($config['database'])) {
+            if ( ! empty($config['database'])) {
                 $options['database'] = $config['database'];
             }
-            if (!empty($config['collate'])) {
+            if ( ! empty($config['collate'])) {
                 $options['charset'] = $config['collate'];
             }
         }
-        if (!empty($config['prefix'])) {
+        if ( ! empty($config['prefix'])) {
             $options['prefix'] = $config['prefix'];
         }
         $options['strictSelectForUpdate'] = isset($config['strictSelectForUpdate'])
@@ -309,8 +309,7 @@ class DB
     /**
      * @param Config $config
      */
-    private static function buildPdoDsn(array $config): string
-    {
+    private static function buildPdoDsn(array $config): string {
         $pdoDriver = strtolower((string)($config['pdoDriver'] ?? 'mysql'));
 
         return match ($pdoDriver) {
@@ -321,7 +320,7 @@ class DB
                     'host' => $config['host'] ?? null,
                     'port' => $config['port'] ?? null,
                     'dbname' => $config['database'] ?? null,
-                ]
+                ],
             ),
             'sqlsrv' => self::buildPdoSqlsrvDsn($config),
             'mysql', 'mariadb' => self::buildPdoKvDsn(
@@ -331,7 +330,7 @@ class DB
                     'port' => $config['port'] ?? null,
                     'dbname' => $config['database'] ?? null,
                     'charset' => $config['collate'] ?? null,
-                ]
+                ],
             ),
             default => self::buildPdoKvDsn(
                 $pdoDriver,
@@ -339,7 +338,7 @@ class DB
                     'host' => $config['host'] ?? null,
                     'port' => $config['port'] ?? null,
                     'dbname' => $config['database'] ?? null,
-                ]
+                ],
             ),
         };
     }
@@ -347,8 +346,7 @@ class DB
     /**
      * @param array<string, float|int|string|null> $parts
      */
-    private static function buildPdoKvDsn(string $driver, array $parts): string
-    {
+    private static function buildPdoKvDsn(string $driver, array $parts): string {
         $segments = [];
         foreach ($parts as $key => $value) {
             if ($value === null || $value === '') {
@@ -362,17 +360,16 @@ class DB
     /**
      * @param Config $config
      */
-    private static function buildPdoSqlsrvDsn(array $config): string
-    {
+    private static function buildPdoSqlsrvDsn(array $config): string {
         $segments = [];
-        if (!empty($config['host'])) {
+        if ( ! empty($config['host'])) {
             $server = $config['host'];
-            if (!empty($config['port'])) {
+            if ( ! empty($config['port'])) {
                 $server .= ',' . (string)$config['port'];
             }
             $segments[] = 'Server=' . $server;
         }
-        if (!empty($config['database'])) {
+        if ( ! empty($config['database'])) {
             $segments[] = 'Database=' . $config['database'];
         }
         return 'sqlsrv:' . implode(';', $segments);
@@ -383,8 +380,8 @@ class DB
      * @param  mixed[]  $arguments
      * @return mixed
      */
-    public static function __callStatic(string $name, array $arguments) : mixed {
-        if (!isset(self::$db)) {
+    public static function __callStatic(string $name, array $arguments): mixed {
+        if ( ! isset(self::$db)) {
             throw new RuntimeException('Database is not connected');
         }
         return self::$db->{$name}(...array_values($arguments));
@@ -399,28 +396,28 @@ class DB
      *
      * @since 1.0
      */
-    public static function getConnection(?string $name = null) : Connection {
+    public static function getConnection(?string $name = null): Connection {
         if ($name === null) {
-            if (!isset(self::$db)) {
+            if ( ! isset(self::$db)) {
                 throw new RuntimeException('Database is not initialized');
             }
             return self::$db;
         }
 
         self::assertConnectionName($name);
-        if (!isset(self::$connections[$name])) {
+        if ( ! isset(self::$connections[$name])) {
             throw new RuntimeException(sprintf('Database connection "%s" is not initialized', $name));
         }
         return self::$connections[$name];
     }
 
-    private static function assertConnectionName(string $name) : void {
+    private static function assertConnectionName(string $name): void {
         if (trim($name) === '') {
             throw new InvalidArgumentException('Database connection name cannot be empty');
         }
     }
 
-    public static function close() : void {
+    public static function close(): void {
         if (isset(self::$db)) {
             self::$db->close();
         }

@@ -27,7 +27,7 @@ final class DatabaseLifecycleTest extends TestCase
         }
     }
 
-    public function testReportsSafeDatabaseOperations(): void {
+    public function test_reports_safe_database_operations(): void {
         $hook = new RecordingDatabaseLifecycleHook();
         $connection = $this->connection('reporting')->setLifecycleHook($hook);
 
@@ -41,7 +41,7 @@ final class DatabaseLifecycleTest extends TestCase
             DatabaseLifecycleEvent::QUERY,
             DatabaseLifecycleEvent::INSERT,
             DatabaseLifecycleEvent::SELECT,
-        ], array_map(static fn(DatabaseLifecycleEvent $event): string => $event->operation, $hook->events));
+        ], array_map(static fn (DatabaseLifecycleEvent $event): string => $event->operation, $hook->events));
 
         foreach ($hook->events as $event) {
             self::assertSame(DatabaseLifecycleEvent::SUCCESS, $event->outcome);
@@ -53,7 +53,7 @@ final class DatabaseLifecycleTest extends TestCase
         }
     }
 
-    public function testRawSqlCaptureIsExplicitlyOptIn(): void {
+    public function test_raw_sql_capture_is_explicitly_opt_in(): void {
         $hook = new RecordingDatabaseLifecycleHook();
         $connection = $this->connection()->setLifecycleHook($hook, includeRawSql: true);
 
@@ -64,7 +64,7 @@ final class DatabaseLifecycleTest extends TestCase
         self::assertStringContainsString('private-value', $hook->events[1]->sql);
     }
 
-    public function testDerivesPdoDatabaseSystemFromDsn(): void {
+    public function test_derives_pdo_database_system_from_dsn(): void {
         $hook = new RecordingDatabaseLifecycleHook();
         $connection = $this->connection(config: [
             'driver' => 'pdo',
@@ -78,7 +78,7 @@ final class DatabaseLifecycleTest extends TestCase
         }
     }
 
-    public function testHookCanBeAttachedAfterConnectionInitialization(): void {
+    public function test_hook_can_be_attached_after_connection_initialization(): void {
         $connection = $this->connection();
         self::assertSame(1, $connection->query('SELECT 1')->fetchSingle());
         $hook = new RecordingDatabaseLifecycleHook();
@@ -90,7 +90,7 @@ final class DatabaseLifecycleTest extends TestCase
         self::assertSame(DatabaseLifecycleEvent::SELECT, $hook->events[0]->operation);
     }
 
-    public function testReportsErrorsWithoutChangingTheThrownException(): void {
+    public function test_reports_errors_without_changing_the_thrown_exception(): void {
         $hook = new RecordingDatabaseLifecycleHook();
         $connection = $this->connection()->setLifecycleHook($hook);
 
@@ -104,7 +104,7 @@ final class DatabaseLifecycleTest extends TestCase
         }
     }
 
-    public function testHookFailureDoesNotAffectDatabaseResult(): void {
+    public function test_hook_failure_does_not_affect_database_result(): void {
         $hook = new RecordingDatabaseLifecycleHook();
         $hook->fail = true;
         $connection = $this->connection()->setLifecycleHook($hook);
@@ -112,7 +112,7 @@ final class DatabaseLifecycleTest extends TestCase
         self::assertSame(1, $connection->query('SELECT 1')->fetchSingle());
     }
 
-    public function testHookDoesNotChangeSerializedState(): void {
+    public function test_hook_does_not_change_serialized_state(): void {
         /** @var Connection $connection */
         $connection = (new ReflectionClass(Connection::class))->newInstanceWithoutConstructor();
         $serialized = serialize($connection);

@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Lsr\Db\Dibi;
 
 use Closure;
@@ -60,13 +62,14 @@ final class Fluent
      * @param  non-empty-string|int  $cacheExpire
      */
     public function __construct(
-        private(set) DibiFluent $fluent,
+        public private(set) DibiFluent $fluent,
         private readonly Connection $connection,
         private readonly Cache $cache,
         private readonly Mapper $mapper,
-        private(set) string|int $cacheExpire = self::DEFAULT_CACHE_EXPIRE,
+        public private(set) string|int $cacheExpire = self::DEFAULT_CACHE_EXPIRE,
         private readonly ?string $cacheNamespace = null,
-    ) {}
+    ) {
+    }
 
     /**
      * @param  string  $name
@@ -75,11 +78,11 @@ final class Fluent
      * @return mixed
      * @noinspection PhpMissingParamTypeInspection
      */
-    public static function __callStatic($name, $arguments) : mixed {
+    public static function __callStatic($name, $arguments): mixed {
         return DibiFluent::$name(...$arguments);
     }
 
-    public function select(mixed ...$field) : Fluent {
+    public function select(mixed ...$field): Fluent {
         $field = $this->transformArgs($field);
         $this->method = 'select';
         $this->requiresSelect = false;
@@ -88,7 +91,7 @@ final class Fluent
         return $this;
     }
 
-    public function delete(mixed ...$cond) : Fluent {
+    public function delete(mixed ...$cond): Fluent {
         $cond = $this->transformArgs($cond);
         $this->method = 'delete';
         $this->forUpdate = false;
@@ -97,7 +100,7 @@ final class Fluent
         return $this;
     }
 
-    public function update(mixed ...$cond) : Fluent {
+    public function update(mixed ...$cond): Fluent {
         $cond = $this->transformArgs($cond);
         $this->method = 'update';
         $this->forUpdate = false;
@@ -106,7 +109,7 @@ final class Fluent
         return $this;
     }
 
-    public function insert(mixed ...$cond) : Fluent {
+    public function insert(mixed ...$cond): Fluent {
         $cond = $this->transformArgs($cond);
         $this->method = 'insert';
         $this->forUpdate = false;
@@ -115,7 +118,7 @@ final class Fluent
         return $this;
     }
 
-    public function __clone() : void {
+    public function __clone(): void {
         $this->fluent = clone $this->fluent;
     }
 
@@ -123,7 +126,7 @@ final class Fluent
      * @param  array<mixed>  $args
      * @return array<mixed>
      */
-    private function transformArgs(array $args) : array {
+    private function transformArgs(array $args): array {
         foreach ($args as $key => $arg) {
             if ($arg instanceof self) {
                 $args[$key] = $arg->fluent;
@@ -132,8 +135,8 @@ final class Fluent
         return $args;
     }
 
-    private function getQueryHash() : string {
-        if (!isset($this->queryHash)) {
+    private function getQueryHash(): string {
+        if ( ! isset($this->queryHash)) {
             $query = $this->__toString();
             if ($this->cacheNamespace !== null && $this->cacheNamespace !== '' && $this->cacheNamespace !== 'main') {
                 $query = $this->cacheNamespace . "\0" . $query;
@@ -150,7 +153,7 @@ final class Fluent
     /**
      * @return $this
      */
-    public function requireSelect() : Fluent {
+    public function requireSelect(): Fluent {
         $this->requiresSelect = true;
         $this->queryHash = null;
         return $this;
@@ -164,7 +167,7 @@ final class Fluent
      *
      * @return $this
      */
-    public function forUpdate(bool $enabled = true) : Fluent {
+    public function forUpdate(bool $enabled = true): Fluent {
         if ($enabled) {
             $command = $this->fluent->getCommand();
             if ($command !== 'SELECT') {
@@ -185,7 +188,7 @@ final class Fluent
      *
      * @return $this
      */
-    public function setupResult(string $method, mixed ...$args) : Fluent {
+    public function setupResult(string $method, mixed ...$args): Fluent {
         $this->fluent->setupResult($method, ...$args);
         $setup = [$method];
         foreach ($args as $arg) {
@@ -200,9 +203,9 @@ final class Fluent
      *
      * @return ($return is DibiFluent::Identifier|DibiFluent::AffectedRows ? int : Result|null)
      */
-    public function execute(?string $return = null) : Result|int|null {
+    public function execute(?string $return = null): Result|int|null {
         $this->assertSelectClauseReady();
-        if (!$this->isSelectForUpdateActive()) {
+        if ( ! $this->isSelectForUpdateActive()) {
             $this->connection->ensureConnected();
             return $this->fluent->execute($return);
         }
@@ -218,7 +221,7 @@ final class Fluent
     /**
      * @param  list<mixed>  $exportArgs
      */
-    private function executeSelect(array $exportArgs = []) : Result {
+    private function executeSelect(array $exportArgs = []): Result {
         $this->assertSelectClauseReady();
         $result = $this->connection->query($this->getSql($exportArgs));
         foreach ($this->resultSetups as $setup) {
@@ -232,21 +235,21 @@ final class Fluent
     /**
      * @return Row|array<mixed>|null
      */
-    public function fetchRow() : Row | array | null {
+    public function fetchRow(): Row | array | null {
         $this->assertSelectClauseReady();
-        if (!$this->isSelectForUpdateActive()) {
+        if ( ! $this->isSelectForUpdateActive()) {
             $this->connection->ensureConnected();
             return $this->normalizeFetchedRow($this->fluent->fetch());
         }
 
         return $this->normalizeFetchedRow(
-            $this->executeSelect($this->shouldAddSingleRowLimit() ? ['%lmt', 1] : [])->fetch()
+            $this->executeSelect($this->shouldAddSingleRowLimit() ? ['%lmt', 1] : [])->fetch(),
         );
     }
 
-    public function fetchSingleValue() : mixed {
+    public function fetchSingleValue(): mixed {
         $this->assertSelectClauseReady();
-        if (!$this->isSelectForUpdateActive()) {
+        if ( ! $this->isSelectForUpdateActive()) {
             $this->connection->ensureConnected();
             return $this->fluent->fetchSingle();
         }
@@ -257,9 +260,9 @@ final class Fluent
     /**
      * @return Row[]
      */
-    public function fetchAllRows(?int $offset = null, ?int $limit = null) : array {
+    public function fetchAllRows(?int $offset = null, ?int $limit = null): array {
         $this->assertSelectClauseReady();
-        if (!$this->isSelectForUpdateActive()) {
+        if ( ! $this->isSelectForUpdateActive()) {
             $this->connection->ensureConnected();
             return $this->fluent->fetchAll($offset, $limit);
         }
@@ -270,9 +273,9 @@ final class Fluent
     /**
      * @return array<mixed>
      */
-    public function fetchAssocRows(string $assoc) : array {
+    public function fetchAssocRows(string $assoc): array {
         $this->assertSelectClauseReady();
-        if (!$this->isSelectForUpdateActive()) {
+        if ( ! $this->isSelectForUpdateActive()) {
             $this->connection->ensureConnected();
             return $this->fluent->fetchAssoc($assoc);
         }
@@ -283,9 +286,9 @@ final class Fluent
     /**
      * @return array<string, mixed>|array<int,mixed>
      */
-    public function fetchPairRows(?string $key = null, ?string $value = null) : array {
+    public function fetchPairRows(?string $key = null, ?string $value = null): array {
         $this->assertSelectClauseReady();
-        if (!$this->isSelectForUpdateActive()) {
+        if ( ! $this->isSelectForUpdateActive()) {
             $this->connection->ensureConnected();
             return $this->fluent->fetchPairs($key, $value);
         }
@@ -296,7 +299,7 @@ final class Fluent
     /**
      * @return Row|array<mixed>|null
      */
-    private function normalizeFetchedRow(mixed $row) : Row | array | null {
+    private function normalizeFetchedRow(mixed $row): Row | array | null {
         if ($row instanceof Row || is_array($row) || $row === null) {
             return $row;
         }
@@ -304,32 +307,32 @@ final class Fluent
         throw new LogicException(sprintf('Unexpected row type "%s".', get_debug_type($row)));
     }
 
-    private function shouldAddSingleRowLimit() : bool {
+    private function shouldAddSingleRowLimit(): bool {
         if ($this->fluent->getCommand() !== 'SELECT') {
             return false;
         }
 
-        return !$this->hasClause('LIMIT');
+        return ! $this->hasClause('LIMIT');
     }
 
-    private function hasClause(string $name) : bool {
+    private function hasClause(string $name): bool {
         $property = new ReflectionProperty(DibiFluent::class, 'clauses');
         /** @var array<string, mixed> $clauses */
         $clauses = $property->getValue($this->fluent);
-        return !empty($clauses[$name]);
+        return ! empty($clauses[$name]);
     }
 
-    private function isSelectForUpdateActive() : bool {
+    private function isSelectForUpdateActive(): bool {
         return $this->forUpdate && $this->connection->getSelectForUpdateModifier() !== null;
     }
 
     /**
      * @param  list<mixed>  $exportArgs
      */
-    private function getSql(array $exportArgs = []) : string {
+    private function getSql(array $exportArgs = []): string {
         $this->assertSelectClauseReady();
         $forUpdateActive = $this->isSelectForUpdateActive();
-        if (!$forUpdateActive && $exportArgs === []) {
+        if ( ! $forUpdateActive && $exportArgs === []) {
             return $this->fluent->__toString();
         }
 
@@ -339,25 +342,25 @@ final class Fluent
          * @return list<mixed>
          */
         $export = Closure::bind(
-            fn(?string $clause = null, array $args = []) : array => $this->_export($clause, array_values($args)),
+            fn (?string $clause = null, array $args = []): array => $this->_export($clause, array_values($args)),
             $this->fluent,
-            DibiFluent::class
+            DibiFluent::class,
         );
         /** @var list<mixed> $query */
         $query = $export(null, $exportArgs);
         $sql = $this->fluent->getConnection()->translate($query);
 
-        if (!$forUpdateActive) {
+        if ( ! $forUpdateActive) {
             return $sql;
         }
 
         $modifier = $this->connection->getSelectForUpdateModifier();
         assert($modifier !== null);
-        return $sql.' '.$modifier;
+        return $sql . ' ' . $modifier;
     }
 
-    private function assertSelectClauseReady() : void {
-        if (!$this->requiresSelect) {
+    private function assertSelectClauseReady(): void {
+        if ( ! $this->requiresSelect) {
             return;
         }
 
@@ -367,11 +370,11 @@ final class Fluent
     /**
      * @return non-empty-string[]
      */
-    private function getCacheTags() : array {
+    private function getCacheTags(): array {
         $tags = $this->cacheTags;
         $tags[] = 'sql';
         if (isset($this->table)) {
-            $tags[] = 'sql/'.$this->table;
+            $tags[] = 'sql/' . $this->table;
         }
         return $tags;
     }
@@ -380,7 +383,7 @@ final class Fluent
      * @param  non-empty-string|int  $expire
      * @return $this
      */
-    public function cacheExpire(string|int $expire) : Fluent {
+    public function cacheExpire(string|int $expire): Fluent {
         $this->cacheExpire = $expire;
         return $this;
     }
@@ -389,12 +392,12 @@ final class Fluent
      * @param  non-empty-string  ...$tags
      * @return $this
      */
-    public function cacheTags(string ...$tags) : Fluent {
+    public function cacheTags(string ...$tags): Fluent {
         $this->cacheTags = array_merge($this->cacheTags, $tags);
         return $this;
     }
 
-    public function from(string $table, mixed ...$args) : Fluent {
+    public function from(string $table, mixed ...$args): Fluent {
         foreach ($args as $key => $arg) {
             if ($arg instanceof self) {
                 $args[$key] = $arg->fluent;
@@ -411,7 +414,7 @@ final class Fluent
      *
      * @return mixed
      */
-    public function __get($name) : mixed {
+    public function __get($name): mixed {
         return $this->fluent->$name;
     }
 
@@ -421,7 +424,7 @@ final class Fluent
      *
      * @return void
      */
-    public function __set($name, $value) : void {
+    public function __set($name, $value): void {
         $this->fluent->$name = $value;
     }
 

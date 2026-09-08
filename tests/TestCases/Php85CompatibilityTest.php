@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 namespace TestCases;
@@ -14,7 +15,7 @@ use Symfony\Component\Serializer\Serializer;
 
 final class Php85CompatibilityTest extends TestCase
 {
-    public function testInspectingDibiClausesDoesNotTriggerDeprecation() : void {
+    public function test_inspecting_dibi_clauses_does_not_trigger_deprecation(): void {
         $cache = new Cache(new DevNullStorage());
         $mapper = new Mapper(new Serializer());
         $connection = new Connection(
@@ -25,16 +26,16 @@ final class Php85CompatibilityTest extends TestCase
                 'pdoDriver' => 'sqlite',
                 'dsn'       => 'sqlite::memory:',
                 'lazy'      => true,
-            ]
+            ],
         );
         $fluent = $connection->select('table1')->limit(1);
         $method = new ReflectionMethod($fluent, 'shouldAddSingleRowLimit');
 
         set_error_handler(
-            static function (int $severity, string $message) : never {
+            static function (int $severity, string $message): never {
                 throw new ErrorException($message, 0, $severity);
             },
-            E_DEPRECATED
+            E_DEPRECATED,
         );
         try {
             self::assertFalse($method->invoke($fluent));

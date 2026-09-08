@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace TestCases;
 
 use Dibi\DriverException;
+use Dibi\Fluent;
 use Lsr\Caching\Cache;
 use Lsr\Db\Connection;
 use Lsr\Serializer\Mapper;
@@ -37,7 +38,7 @@ final class ConnectionReconnectTest extends TestCase
         if ($port === false || $port === '') {
             self::markTestSkipped('Set LSR_DB_TEST_PORT to an isolated MySQL integration server.');
         }
-        if (!extension_loaded('mysqli')) {
+        if ( ! extension_loaded('mysqli')) {
             self::markTestSkipped('The mysqli extension is required to kill the tested MySQL sessions.');
         }
         $port = filter_var($port, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1, 'max_range' => 65535]]);
@@ -49,7 +50,7 @@ final class ConnectionReconnectTest extends TestCase
             'CREATE TABLE `' . $this->table . '` ('
             . 'id INT NOT NULL AUTO_INCREMENT PRIMARY KEY, '
             . 'value VARCHAR(100) NOT NULL UNIQUE'
-            . ') ENGINE=InnoDB'
+            . ') ENGINE=InnoDB',
         ));
     }
 
@@ -92,7 +93,7 @@ final class ConnectionReconnectTest extends TestCase
     }
 
     #[DataProvider('drivers')]
-    public function testRawQueryReconnectsBeforeApplicationSql(string $driver): void {
+    public function test_raw_query_reconnects_before_application_sql(string $driver): void {
         $connection = $this->connection($driver);
         $connection->insert($this->table, ['value' => 'persisted']);
         $session = $this->sessionId($connection);
@@ -104,7 +105,7 @@ final class ConnectionReconnectTest extends TestCase
     }
 
     #[DataProvider('drivers')]
-    public function testFluentBuiltBeforeDisconnectCanFetchAndExecute(string $driver): void {
+    public function test_fluent_built_before_disconnect_can_fetch_and_execute(string $driver): void {
         $connection = $this->connection($driver);
         $connection->insert($this->table, ['value' => 'existing']);
         $select = $connection->select($this->table, 'value')->where('value = %s', 'existing');
@@ -117,13 +118,13 @@ final class ConnectionReconnectTest extends TestCase
         self::assertNotSame($firstSession, $secondSession);
         $this->kill($secondSession);
 
-        self::assertSame(1, $insert->execute(\Dibi\Fluent::AffectedRows));
+        self::assertSame(1, $insert->execute(Fluent::AffectedRows));
         self::assertNotSame($secondSession, $this->sessionId($connection));
         self::assertSame(['existing', 'fluent-insert'], $this->values());
     }
 
     #[DataProvider('drivers')]
-    public function testCountBuiltBeforeDisconnectReconnectsWithAndWithoutCache(string $driver): void {
+    public function test_count_built_before_disconnect_reconnects_with_and_without_cache(string $driver): void {
         $connection = $this->connection($driver);
         $connection->insert($this->table, ['value' => 'first'], ['value' => 'second']);
         $query = $connection->select($this->table);
@@ -140,8 +141,8 @@ final class ConnectionReconnectTest extends TestCase
     }
 
     #[DataProvider('drivers')]
-    public function testCachedFluentDoesNotReplaySqlInterruptedDuringExecution(string $driver): void {
-        if (!function_exists('proc_open')) {
+    public function test_cached_fluent_does_not_replay_sql_interrupted_during_execution(string $driver): void {
+        if ( ! function_exists('proc_open')) {
             self::markTestSkipped('proc_open is required to kill a query while it is executing.');
         }
         $connection = $this->connection($driver);
@@ -199,7 +200,7 @@ final class ConnectionReconnectTest extends TestCase
     }
 
     #[DataProvider('drivers')]
-    public function testWriteHelperReconnectsAndPreservesAffectedRowsAndInsertId(string $driver): void {
+    public function test_write_helper_reconnects_and_preserves_affected_rows_and_insert_id(string $driver): void {
         $connection = $this->connection($driver);
         $session = $this->sessionId($connection);
         $this->kill($session);
@@ -210,14 +211,14 @@ final class ConnectionReconnectTest extends TestCase
         self::assertSame(1, $insertId);
         self::assertSame(1, $connection->getAffectedRows());
         self::assertSame($insertId, (int) $this->admin->query(
-            'SELECT id FROM `' . $this->table . '` WHERE value = \'exactly-once\''
+            'SELECT id FROM `' . $this->table . '` WHERE value = \'exactly-once\'',
         )->fetch_column());
         self::assertSame(['exactly-once'], $this->values());
         self::assertNotSame($session, $this->sessionId($connection));
     }
 
     #[DataProvider('disabledConnections')]
-    public function testDisabledReconnectPreservesGoneAwayError(string $driver, ?bool $autoReconnect): void {
+    public function test_disabled_reconnect_preserves_gone_away_error(string $driver, ?bool $autoReconnect): void {
         $connection = $this->connection($driver, $autoReconnect);
         $this->kill($this->sessionId($connection));
 
@@ -231,7 +232,7 @@ final class ConnectionReconnectTest extends TestCase
     }
 
     #[DataProvider('transactionDepths')]
-    public function testDisconnectDoesNotResumeManagedTransaction(string $driver, bool $nested): void {
+    public function test_disconnect_does_not_resume_managed_transaction(string $driver, bool $nested): void {
         $connection = $this->connection($driver);
         $disconnectAndWrite = function (Connection $connection): bool {
             $connection->insert($this->table, ['value' => 'before-disconnect']);
@@ -260,7 +261,7 @@ final class ConnectionReconnectTest extends TestCase
     }
 
     #[DataProvider('drivers')]
-    public function testCaughtNestedFailureDoesNotAllowOuterTransactionToReconnect(string $driver): void {
+    public function test_caught_nested_failure_does_not_allow_outer_transaction_to_reconnect(string $driver): void {
         $connection = $this->connection($driver);
         $nestedFailed = false;
         try {
@@ -288,7 +289,7 @@ final class ConnectionReconnectTest extends TestCase
     }
 
     #[DataProvider('transactionDepths')]
-    public function testCallbackExceptionSurvivesRollbackFailureAndStackUnwinds(string $driver, bool $nested): void {
+    public function test_callback_exception_survives_rollback_failure_and_stack_unwinds(string $driver, bool $nested): void {
         $connection = $this->connection($driver);
         $original = new RuntimeException('Application callback failed.');
         $fail = function (Connection $connection) use ($original): bool {
@@ -320,7 +321,7 @@ final class ConnectionReconnectTest extends TestCase
     }
 
     #[DataProvider('drivers')]
-    public function testFailedRollbackPreservesNestedSavepointsAndAncestorRollbackUnwindsThem(string $driver): void {
+    public function test_failed_rollback_preserves_nested_savepoints_and_ancestor_rollback_unwinds_them(string $driver): void {
         $connection = $this->connection($driver);
         $connection->begin();
         $connection->insert($this->table, ['value' => 'outer']);
@@ -350,7 +351,7 @@ final class ConnectionReconnectTest extends TestCase
     }
 
     #[DataProvider('drivers')]
-    public function testCloseClearsLostNestedTransactionAndAllowsFreshWork(string $driver): void {
+    public function test_close_clears_lost_nested_transaction_and_allows_fresh_work(string $driver): void {
         $connection = $this->connection($driver);
         $connection->begin();
         $connection->insert($this->table, ['value' => 'uncommitted']);
@@ -368,7 +369,7 @@ final class ConnectionReconnectTest extends TestCase
     }
 
     #[DataProvider('drivers')]
-    public function testSqlErrorsDoNotReplaceSessionOrReplayWrites(string $driver): void {
+    public function test_sql_errors_do_not_replace_session_or_replay_writes(string $driver): void {
         $connection = $this->connection($driver);
         $connection->insert($this->table, ['value' => 'unique-value']);
         $session = $this->sessionId($connection);
@@ -394,7 +395,7 @@ final class ConnectionReconnectTest extends TestCase
     }
 
     private function connection(string $driver, ?bool $autoReconnect = true): Connection {
-        if ($driver === 'pdo_mysql' && !extension_loaded('pdo_mysql')) {
+        if ($driver === 'pdo_mysql' && ! extension_loaded('pdo_mysql')) {
             self::markTestSkipped('The pdo_mysql extension is required for this driver.');
         }
         $config = [

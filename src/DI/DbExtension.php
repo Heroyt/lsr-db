@@ -41,11 +41,10 @@ use Nette\Schema\Schema;
  */
 final class DbExtension extends CompilerExtension
 {
-    public function getConfigSchema(): Schema
-    {
+    public function getConfigSchema(): Schema {
         $connection = Expect::structure([
             'driver' => Expect::string()->default('mysqli')->assert(
-                static fn(mixed $driver): bool => is_string($driver) && $driver !== '',
+                static fn (mixed $driver): bool => is_string($driver) && $driver !== '',
                 'Database driver cannot be empty.',
             ),
             'dsn' => Expect::string()->nullable()->default(null),
@@ -71,15 +70,14 @@ final class DbExtension extends CompilerExtension
                 $connection,
                 Expect::string()->pattern('[A-Za-z0-9_]+'),
             )->required()->assert(
-                static fn(mixed $connections): bool => is_array($connections)
+                static fn (mixed $connections): bool => is_array($connections)
                     && array_key_exists('main', $connections),
                 'The main database connection must be configured.',
             ),
         ]);
     }
 
-    public function loadConfiguration(): void
-    {
+    public function loadConfiguration(): void {
         $builder = $this->getContainerBuilder();
         $definitions = [];
 
@@ -123,8 +121,7 @@ final class DbExtension extends CompilerExtension
     /**
      * @return array<string, mixed>
      */
-    private static function normalizeConfig(object $config): array
-    {
+    private static function normalizeConfig(object $config): array {
         $normalized = [];
         foreach ((array) $config as $name => $value) {
             if ($value !== null) {

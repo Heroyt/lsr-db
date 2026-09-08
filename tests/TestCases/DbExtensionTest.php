@@ -14,8 +14,8 @@ use Nette\Caching\Storages\DevNullStorage;
 use Nette\DI\Compiler;
 use Nette\DI\Container;
 use Nette\DI\ContainerLoader;
-use Nette\DI\InvalidConfigurationException;
 use Nette\DI\Extensions\DIExtension;
+use Nette\DI\InvalidConfigurationException;
 use Nette\Utils\FileSystem;
 use PHPUnit\Framework\TestCase;
 use RuntimeException;
@@ -26,22 +26,19 @@ final class DbExtensionTest extends TestCase
 {
     private string $directory;
 
-    protected function setUp(): void
-    {
+    protected function setUp(): void {
         DB::resetConnections();
         $this->directory = TMP_DIR . 'di-' . bin2hex(random_bytes(6));
         FileSystem::createDir($this->directory);
     }
 
-    protected function tearDown(): void
-    {
+    protected function tearDown(): void {
         DB::close();
         DB::resetConnections();
         FileSystem::delete($this->directory);
     }
 
-    public function testConnectionRegistryRemainsUninitializedUntilMainServiceIsResolved(): void
-    {
+    public function test_connection_registry_remains_uninitialized_until_main_service_is_resolved(): void {
         $this->createContainer([
             'main' => $this->sqliteConfig('main'),
         ]);
@@ -51,8 +48,7 @@ final class DbExtensionTest extends TestCase
         DB::getConnection();
     }
 
-    public function testResolvingMainServiceRegistersMainAndNamedConnections(): void
-    {
+    public function test_resolving_main_service_registers_main_and_named_connections(): void {
         $container = $this->createContainer([
             'main' => [
                 'driver' => 'pdo',
@@ -83,8 +79,7 @@ final class DbExtensionTest extends TestCase
         self::assertSame($main, $container->getByType(Connection::class));
     }
 
-    public function testMainConnectionIsRequired(): void
-    {
+    public function test_main_connection_is_required(): void {
         $this->expectException(InvalidConfigurationException::class);
         $this->expectExceptionMessage('The main database connection must be configured.');
 
@@ -96,8 +91,7 @@ final class DbExtensionTest extends TestCase
     /**
      * @param array<string, array<string, mixed>> $connections
      */
-    private function createContainer(array $connections): Container
-    {
+    private function createContainer(array $connections): Container {
         $loader = new ContainerLoader($this->directory, true);
         /** @var class-string<Container> $containerClass */
         $containerClass = $loader->load(
@@ -137,8 +131,7 @@ final class DbExtensionTest extends TestCase
     /**
      * @return array{driver: string, database: string, lazy: bool}
      */
-    private function sqliteConfig(string $name): array
-    {
+    private function sqliteConfig(string $name): array {
         return [
             'driver' => 'sqlite',
             'database' => $this->directory . '/' . $name . '.db',

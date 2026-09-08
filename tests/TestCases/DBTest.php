@@ -1,4 +1,6 @@
 <?php
+
+declare(strict_types=1);
 /** @noinspection PhpDocMissingThrowsInspection */
 /** @noinspection PhpUndefinedFieldInspection */
 /** @noinspection SqlResolve */
@@ -9,17 +11,19 @@ namespace TestCases;
 use DateTime;
 use Dibi\Result;
 use Dibi\Row;
+use Exception;
+use InvalidArgumentException;
+use LogicException;
 use Lsr\Caching\Cache;
 use Lsr\Db\Connection;
 use Lsr\Db\DB;
 use Lsr\Db\Dibi\Fluent;
 use Lsr\Serializer\Mapper;
-use InvalidArgumentException;
 use Lsr\Serializer\Normalizer\DateTimeNormalizer;
 use Lsr\Serializer\Normalizer\DibiRowNormalizer;
-use LogicException;
 use Nette\Caching\Storages\DevNullStorage;
 use Nette\Caching\Storages\MemoryStorage;
+use PDO;
 use PHPUnit\Framework\Attributes\Depends;
 use PHPUnit\Framework\TestCase;
 use RuntimeException;
@@ -41,11 +45,11 @@ class DBTest extends TestCase
     private Cache $cache;
     private Mapper $mapper;
 
-    public function tearDown() : void {
+    public function tearDown(): void {
         $this->dropTable();
         DB::close();
         DB::resetConnections();
-        $files = glob(TMP_DIR.'*.db');
+        $files = glob(TMP_DIR . '*.db');
         if (is_array($files)) {
             foreach ($files as $file) {
                 unlink($file);
@@ -54,7 +58,7 @@ class DBTest extends TestCase
         parent::tearDown();
     }
 
-    public function dropTable() : void {
+    public function dropTable(): void {
         try {
             DB::getConnection()->query("DROP TABLE table2");
             DB::getConnection()->query("DROP TABLE table1");
@@ -63,95 +67,96 @@ class DBTest extends TestCase
         }
     }
 
-    public function testUninitializedSelect() : void {
+    public function test_uninitialized_select(): void {
         $this->expectException(RuntimeException::class);
         DB::select('table1', '*');
     }
 
-    public function testUninitializedInsert() : void {
+    public function test_uninitialized_insert(): void {
         $this->expectException(RuntimeException::class);
         DB::insert('table1', []);
     }
 
-    public function testUninitializedInsertIgnore() : void {
+    public function test_uninitialized_insert_ignore(): void {
         $this->expectException(RuntimeException::class);
         DB::insertIgnore('table1', []);
     }
 
-    public function testUninitializedInsertGet() : void {
+    public function test_uninitialized_insert_get(): void {
         $this->expectException(RuntimeException::class);
         DB::insertGet('table1', []);
     }
 
-    public function testUninitializedUpdate() : void {
+    public function test_uninitialized_update(): void {
         $this->expectException(RuntimeException::class);
         DB::update('table1', []);
     }
 
-    public function testUninitializedDelete() : void {
+    public function test_uninitialized_delete(): void {
         $this->expectException(RuntimeException::class);
         DB::delete('table1');
     }
 
-    public function testUninitializedDeleteGet() : void {
+    public function test_uninitialized_delete_get(): void {
         $this->expectException(RuntimeException::class);
         DB::deleteGet('table1');
     }
 
-    public function testUninitializedReplace() : void {
+    public function test_uninitialized_replace(): void {
         $this->expectException(RuntimeException::class);
         DB::replace('table1', []);
     }
 
-    public function testUninitializedGetInsertId() : void {
+    public function test_uninitialized_get_insert_id(): void {
         $this->expectException(RuntimeException::class);
         DB::getInsertId();
     }
 
-    public function testUninitializedResetAutoincrement() : void {
+    public function test_uninitialized_reset_autoincrement(): void {
         $this->expectException(RuntimeException::class);
         DB::resetAutoIncrement('table');
     }
 
-    public function testUninitializedGetAffectedRows() : void {
+    public function test_uninitialized_get_affected_rows(): void {
         $this->expectException(RuntimeException::class);
         DB::getAffectedRows();
     }
 
     #[Depends('testInitSqlite')]
-    public function testInsert() : void {
+    public function test_insert(): void {
         $this->initSqlite();
         $count = DB::insert(
             'table1',
             [
                 'name' => 'test1',
                 'age'  => null,
-            ]
+            ],
         );
         self::assertEquals(1, $count);
     }
 
     #[Depends('testInitSqlite')]
-    public function testInsertTransactional() : void {
+    public function test_insert_transactional(): void {
         $this->initSqlite();
         DB::transaction(
             static function (Connection $connection) {
-            $connection->insert(
-                'table1',
-                [
-                    'name' => 'transaction1',
-                    'age'  => null,
-                ]
-            );
-            $connection->insert(
-                'table1',
-                [
-                    'name' => 'transaction2',
-                    'age'  => null,
-                ]
-            );
-            return true;
-        });
+                $connection->insert(
+                    'table1',
+                    [
+                        'name' => 'transaction1',
+                        'age'  => null,
+                    ],
+                );
+                $connection->insert(
+                    'table1',
+                    [
+                        'name' => 'transaction2',
+                        'age'  => null,
+                    ],
+                );
+                return true;
+            },
+        );
         $rows = DB::select('table1')
             ->where('name IN %in', ['transaction1', 'transaction2'])
             ->fetchAll();
@@ -164,56 +169,56 @@ class DBTest extends TestCase
                     [
                         'name' => 'transaction3',
                         'age'  => null,
-                    ]
+                    ],
                 );
                 return false;
-            }
+            },
         );
         $rows = DB::select('table1')
-                  ->where('name IN %in', ['transaction3'])
-                  ->fetchAll();
+            ->where('name IN %in', ['transaction3'])
+            ->fetchAll();
         $this->assertCount(0, $rows);
 
         try {
             DB::transaction(
-                static function (Connection $connection) {
+                static function (Connection $connection): void {
                     $connection->insert(
                         'table1',
                         [
                             'name' => 'transaction4',
                             'age'  => null,
-                        ]
+                        ],
                     );
-                    throw new \Exception('Thrown exception');
-                }
+                    throw new Exception('Thrown exception');
+                },
             );
-        } catch (\Exception $e) {
+        } catch (Exception $e) {
             $this->assertEquals('Thrown exception', $e->getMessage());
         }
         $rows = DB::select('table1')
-                  ->where('name IN %in', ['transaction4'])
-                  ->fetchAll();
+            ->where('name IN %in', ['transaction4'])
+            ->fetchAll();
         $this->assertCount(0, $rows);
     }
 
     /**
      * @param array<string, mixed> $config
      */
-    public function initSqlite(array $config = []) : void {
-        $fileName = uniqid('', true).'.db';
+    public function initSqlite(array $config = []): void {
+        $fileName = uniqid('', true) . '.db';
         DB::init(
             DB::getMain(
                 $this->cache,
                 $this->mapper,
                 array_merge(
                     [
-                        'database' => ROOT."tests/tmp/$fileName",
+                        'database' => ROOT . "tests/tmp/{$fileName}",
                         'driver'   => "sqlite",
                         'prefix'   => "",
                     ],
-                    $config
-                )
-            )
+                    $config,
+                ),
+            ),
         );
         $this->initSqliteTable();
     }
@@ -221,9 +226,8 @@ class DBTest extends TestCase
     /**
      * @param array<string, mixed> $config
      */
-    public function initPdoSqlite(array $config = []): void
-    {
-        if (!extension_loaded('pdo_sqlite')) {
+    public function initPdoSqlite(array $config = []): void {
+        if ( ! extension_loaded('pdo_sqlite')) {
             self::markTestSkipped('PDO SQLite extension is not available.');
         }
 
@@ -234,19 +238,19 @@ class DBTest extends TestCase
                 $this->mapper,
                 array_merge(
                     [
-                        'database' => ROOT . "tests/tmp/$fileName",
+                        'database' => ROOT . "tests/tmp/{$fileName}",
                         'driver' => 'pdo',
                         'pdoDriver' => 'sqlite',
                         'prefix' => '',
                     ],
-                    $config
-                )
-            )
+                    $config,
+                ),
+            ),
         );
         $this->initSqliteTable();
     }
 
-    public function initSqliteTable() : void {
+    public function initSqliteTable(): void {
         DB::getConnection()->query(
             "
 			CREATE TABLE table1 ( 
@@ -254,7 +258,7 @@ class DBTest extends TestCase
 			    name char(60) NOT NULL, 
 			    age int 
 			);
-		"
+		",
         );
         DB::getConnection()->query(
             "
@@ -263,21 +267,21 @@ class DBTest extends TestCase
 			    table_1_id integer,
 			    name varchar(60) NOT NULL 
 			);
-		"
+		",
         );
     }
 
-    private function createSqliteConnection(?string $name = null, ?Cache $cache = null) : Connection {
-        $fileName = uniqid('', true).'.db';
+    private function createSqliteConnection(?string $name = null, ?Cache $cache = null): Connection {
+        $fileName = uniqid('', true) . '.db';
         $connection = DB::createConnection(
             $cache ?? $this->cache,
             $this->mapper,
             [
-                'database' => ROOT."tests/tmp/$fileName",
+                'database' => ROOT . "tests/tmp/{$fileName}",
                 'driver'   => "sqlite",
                 'prefix'   => "",
             ],
-            $name
+            $name,
         );
         $connection->query(
             "
@@ -286,14 +290,14 @@ class DBTest extends TestCase
 			    name char(60) NOT NULL,
 			    age int
 			);
-		"
+		",
         );
 
         return $connection;
     }
 
     #[Depends('testInitMysql')]
-    public function testInsertMultiple() : void {
+    public function test_insert_multiple(): void {
         $this->initMysql();
         $count = DB::insert(
             'table1',
@@ -308,13 +312,13 @@ class DBTest extends TestCase
             [
                 'name' => 'test3',
                 'age'  => 99,
-            ]
+            ],
         );
         self::assertEquals(3, DB::select('table1', 'count(*)')->fetchSingle());
         self::assertEquals(3, $count);
     }
 
-    public function initMysql() : void {
+    public function initMysql(): void {
         $port = getenv('LSR_DB_TEST_PORT');
         if ($port === false || $port === '') {
             self::markTestSkipped('Set LSR_DB_TEST_PORT to an isolated MySQL integration server.');
@@ -331,13 +335,13 @@ class DBTest extends TestCase
                     'password' => '',
                     'database' => 'reconnect_test',
                     'collate'  => 'utf8mb4',
-                ]
-            )
+                ],
+            ),
         );
         $this->initMysqlTable();
     }
 
-    public function initMysqlTable() : void {
+    public function initMysqlTable(): void {
         DB::getConnection()->query(
             "
 			CREATE TABLE IF NOT EXISTS table1 ( 
@@ -347,7 +351,7 @@ class DBTest extends TestCase
 			    date datetime DEFAULT NULL,
 			    PRIMARY KEY (`id`)
 			);
-		"
+		",
         );
         DB::getConnection()->query(
             "
@@ -358,19 +362,19 @@ class DBTest extends TestCase
 			    PRIMARY KEY (`id`),
 			    CONSTRAINT table_1_fk FOREIGN KEY (`table_1_id`) REFERENCES table1 (id) ON DELETE SET NULL 
 			);
-		"
+		",
         );
     }
 
     #[Depends('testInitMysql')]
-    public function testInsertIgnore() : void {
+    public function test_insert_ignore(): void {
         $this->initMysql();
         $count = DB::insert(
             'table1',
             [
                 'name' => 'test1',
                 'age'  => null,
-            ]
+            ],
         );
         $id = DB::getInsertId();
         self::assertEquals(1, $count);
@@ -379,25 +383,25 @@ class DBTest extends TestCase
             [
                 'id'   => $id,
                 'name' => 'test2',
-            ]
+            ],
         );
         self::assertEquals(0, $count);
     }
 
     #[Depends('testInitMysql')]
-    public function testGetAffectedRows() : void {
+    public function test_get_affected_rows(): void {
         $this->initMysql();
         DB::insert(
             'table1',
             [
                 'name' => 'test1',
                 'age'  => null,
-            ]
+            ],
         );
         self::assertEquals(1, DB::getAffectedRows());
     }
 
-    public function testInitSqlite() : void {
+    public function test_init_sqlite(): void {
         // Init SQLite
         $this->initSqlite();
         self::assertTrue(DB::getConnection()->isConnected());
@@ -405,24 +409,21 @@ class DBTest extends TestCase
         self::assertFalse(DB::getConnection()->isConnected());
     }
 
-    public function testInitPdoSqlite(): void
-    {
+    public function test_init_pdo_sqlite(): void {
         $this->initPdoSqlite();
         self::assertTrue(DB::getConnection()->isConnected());
         DB::close();
         self::assertFalse(DB::getConnection()->isConnected());
     }
 
-    public function testCreateConnectionUsesExplicitTestConfig(): void
-    {
+    public function test_create_connection_uses_explicit_test_config(): void {
         $connection = $this->createSqliteConnection('test');
         $connection->insert('table1', ['name' => 'test', 'age' => null]);
 
         self::assertSame(1, $connection->select('table1', 'count(*)')->fetchSingle());
     }
 
-    public function testNamedConnectionCanBecomeActiveConnection(): void
-    {
+    public function test_named_connection_can_become_active_connection(): void {
         $connection = $this->createSqliteConnection();
 
         DB::initNamed('test', $connection);
@@ -432,8 +433,7 @@ class DBTest extends TestCase
         self::assertSame($connection, DB::getConnection('test'));
     }
 
-    public function testMainNamedConnectionStaysActiveAndRegistered(): void
-    {
+    public function test_main_named_connection_stays_active_and_registered(): void {
         $connection = $this->createSqliteConnection('main');
 
         DB::initNamed('main', $connection);
@@ -442,24 +442,21 @@ class DBTest extends TestCase
         self::assertSame($connection, DB::getConnection('main'));
     }
 
-    public function testEmptyConnectionNameIsRejected(): void
-    {
+    public function test_empty_connection_name_is_rejected(): void {
         $this->expectException(InvalidArgumentException::class);
         $this->expectExceptionMessage('Database connection name cannot be empty');
 
         DB::initNamed('', $this->createSqliteConnection('test'));
     }
 
-    public function testUnknownNamedConnectionIsRejected(): void
-    {
+    public function test_unknown_named_connection_is_rejected(): void {
         $this->expectException(RuntimeException::class);
         $this->expectExceptionMessage('Database connection "missing" is not initialized');
 
         DB::getConnection('missing');
     }
 
-    public function testWithConnectionRestoresPreviousStaticConnection(): void
-    {
+    public function test_with_connection_restores_previous_static_connection(): void {
         $this->initSqlite();
         DB::insert('table1', ['name' => 'main', 'age' => null]);
         $mainConnection = DB::getConnection();
@@ -468,10 +465,10 @@ class DBTest extends TestCase
 
         $count = DB::withConnection(
             'test',
-            static function () : int {
+            static function (): int {
                 DB::insert('table1', ['name' => 'test', 'age' => null]);
                 return (int) DB::select('table1', 'count(*)')->fetchSingle();
-            }
+            },
         );
 
         self::assertSame(1, $count);
@@ -480,8 +477,7 @@ class DBTest extends TestCase
         self::assertSame(0, DB::select('table1', 'count(*)')->where('name = %s', 'test')->fetchSingle());
     }
 
-    public function testWithConnectionRestoresPreviousConnectionAfterException(): void
-    {
+    public function test_with_connection_restores_previous_connection_after_exception(): void {
         $this->initSqlite();
         $mainConnection = DB::getConnection();
         DB::initNamed('test', $this->createSqliteConnection('test'));
@@ -489,9 +485,9 @@ class DBTest extends TestCase
         try {
             DB::withConnection(
                 'test',
-                static function () : never {
+                static function (): never {
                     throw new RuntimeException('Test failure');
-                }
+                },
             );
             self::fail('Expected scoped callback to throw');
         } catch (RuntimeException $exception) {
@@ -501,14 +497,13 @@ class DBTest extends TestCase
         self::assertSame($mainConnection, DB::getConnection());
     }
 
-    public function testWithConnectionRestoresUninitializedState(): void
-    {
+    public function test_with_connection_restores_uninitialized_state(): void {
         DB::resetConnections();
         $testConnection = $this->createSqliteConnection('test');
 
         self::assertSame(
             $testConnection,
-            DB::withConnection($testConnection, static fn() : Connection => DB::getConnection())
+            DB::withConnection($testConnection, static fn (): Connection => DB::getConnection()),
         );
 
         $this->expectException(RuntimeException::class);
@@ -516,8 +511,7 @@ class DBTest extends TestCase
         DB::getConnection();
     }
 
-    public function testWithConnectionSupportsNestedScopes(): void
-    {
+    public function test_with_connection_supports_nested_scopes(): void {
         $this->initSqlite();
         $mainConnection = DB::getConnection();
         $firstConnection = $this->createSqliteConnection('first');
@@ -527,21 +521,20 @@ class DBTest extends TestCase
 
         DB::withConnection(
             'first',
-            static function () use ($firstConnection, $secondConnection) : void {
+            static function () use ($firstConnection, $secondConnection): void {
                 self::assertSame($firstConnection, DB::getConnection());
                 DB::withConnection(
                     'second',
-                    static fn() => self::assertSame($secondConnection, DB::getConnection())
+                    static fn () => self::assertSame($secondConnection, DB::getConnection()),
                 );
                 self::assertSame($firstConnection, DB::getConnection());
-            }
+            },
         );
 
         self::assertSame($mainConnection, DB::getConnection());
     }
 
-    public function testResetConnectionsClearsActiveAndNamedConnections(): void
-    {
+    public function test_reset_connections_clears_active_and_named_connections(): void {
         $connection = $this->createSqliteConnection('test');
         DB::initNamed('test', $connection);
         DB::useConnection('test');
@@ -553,8 +546,7 @@ class DBTest extends TestCase
         DB::getConnection('test');
     }
 
-    public function testNamedConnectionsWithSameNameUseSeparateQueryCaches(): void
-    {
+    public function test_named_connections_with_same_name_use_separate_query_caches(): void {
         $cache = new Cache(new MemoryStorage());
         $firstConnection = $this->createSqliteConnection('test', $cache);
         $secondConnection = $this->createSqliteConnection('test', $cache);
@@ -566,8 +558,7 @@ class DBTest extends TestCase
         self::assertSame('first', $firstConnection->select('table1', 'name')->fetchSingle());
     }
 
-    public function testForUpdateIgnoresUnsupportedSqliteDriverByDefault(): void
-    {
+    public function test_for_update_ignores_unsupported_sqlite_driver_by_default(): void {
         $this->initSqlite();
 
         $sql = (string) DB::select('table1')->forUpdate();
@@ -575,8 +566,7 @@ class DBTest extends TestCase
         self::assertSame('SELECT * FROM [table1]', $sql);
     }
 
-    public function testForUpdateIgnoresUnsupportedPdoSqliteDriverByDefault(): void
-    {
+    public function test_for_update_ignores_unsupported_pdo_sqlite_driver_by_default(): void {
         $this->initPdoSqlite();
 
         $sql = (string) DB::select('table1')->forUpdate();
@@ -584,8 +574,7 @@ class DBTest extends TestCase
         self::assertSame('SELECT * FROM [table1]', $sql);
     }
 
-    public function testForUpdateRejectsUnsupportedSqliteDriverInStrictMode(): void
-    {
+    public function test_for_update_rejects_unsupported_sqlite_driver_in_strict_mode(): void {
         $this->initSqlite(['strictSelectForUpdate' => true]);
 
         $this->expectException(LogicException::class);
@@ -594,8 +583,7 @@ class DBTest extends TestCase
         DB::select('table1')->forUpdate();
     }
 
-    public function testForUpdateRejectsUnsupportedPdoSqliteDriverInStrictMode(): void
-    {
+    public function test_for_update_rejects_unsupported_pdo_sqlite_driver_in_strict_mode(): void {
         $this->initPdoSqlite(['strictSelectForUpdate' => true]);
 
         $this->expectException(LogicException::class);
@@ -604,8 +592,7 @@ class DBTest extends TestCase
         DB::select('table1')->forUpdate();
     }
 
-    public function testPdoConfigBuildsMysqlDsn(): void
-    {
+    public function test_pdo_config_builds_mysql_dsn(): void {
         $connection = DB::getMain(
             $this->cache,
             $this->mapper,
@@ -619,7 +606,7 @@ class DBTest extends TestCase
                 'database' => 'test',
                 'collate' => 'utf8mb4',
                 'lazy' => true,
-            ]
+            ],
         );
 
         self::assertSame('pdo', $connection->connection->getConfig('driver'));
@@ -630,27 +617,25 @@ class DBTest extends TestCase
         self::assertTrue($connection->connection->getConfig('lazy'));
     }
 
-    public function testPdoConfigUsesExplicitDsn(): void
-    {
+    public function test_pdo_config_uses_explicit_dsn(): void {
         $connection = DB::getMain(
             $this->cache,
             $this->mapper,
             [
                 'driver' => 'pdo',
                 'dsn' => 'sqlite::memory:',
-                'options' => [\PDO::ATTR_TIMEOUT => 2],
+                'options' => [PDO::ATTR_TIMEOUT => 2],
                 'lazy' => true,
-            ]
+            ],
         );
 
         self::assertSame('pdo', $connection->connection->getConfig('driver'));
         self::assertSame('sqlite::memory:', $connection->connection->getConfig('dsn'));
-        self::assertSame([\PDO::ATTR_TIMEOUT => 2], $connection->connection->getConfig('options'));
+        self::assertSame([PDO::ATTR_TIMEOUT => 2], $connection->connection->getConfig('options'));
         self::assertTrue($connection->connection->getConfig('lazy'));
     }
 
-    public function testDirectConnectionBuildsPdoDsn(): void
-    {
+    public function test_direct_connection_builds_pdo_dsn(): void {
         $connection = new Connection(
             $this->cache,
             $this->mapper,
@@ -664,15 +649,14 @@ class DBTest extends TestCase
                 'database' => 'test',
                 'collate' => 'utf8mb4',
                 'lazy' => true,
-            ]
+            ],
         );
 
         self::assertSame('pdo', $connection->connection->getConfig('driver'));
         self::assertSame('mysql:host=localhost;port=3306;dbname=test;charset=utf8mb4', $connection->connection->getConfig('dsn'));
     }
 
-    public function testDirectConnectionBuildsAliasedPdoDsn(): void
-    {
+    public function test_direct_connection_builds_aliased_pdo_dsn(): void {
         $connection = new Connection(
             $this->cache,
             $this->mapper,
@@ -685,14 +669,14 @@ class DBTest extends TestCase
                 'database' => 'test',
                 'collate' => 'utf8mb4',
                 'lazy' => true,
-            ]
+            ],
         );
 
         self::assertSame('pdo', $connection->connection->getConfig('driver'));
         self::assertSame('mysql:host=localhost;port=3306;dbname=test;charset=utf8mb4', $connection->connection->getConfig('dsn'));
     }
 
-    public function testInitMysql() : void {
+    public function test_init_mysql(): void {
         // Init MySQL
         $this->initMysql();
         self::assertTrue(DB::getConnection()->isConnected());
@@ -701,34 +685,33 @@ class DBTest extends TestCase
     }
 
     #[Depends('testInitMysql')]
-    public function testForUpdateMysqlSqlGeneration(): void
-    {
+    public function test_for_update_mysql_sql_generation(): void {
         $this->initMysql();
 
         $sql = (string) DB::select('table1')
-                          ->where('id = %i', 1)
-                          ->limit(1)
-                          ->forUpdate();
+            ->where('id = %i', 1)
+            ->limit(1)
+            ->forUpdate();
 
         self::assertSame('SELECT * FROM `table1` WHERE id = 1 LIMIT 1 FOR UPDATE', $sql);
     }
 
     #[Depends('testInitMysql')]
-    public function testResetAutoIncrement() : void {
+    public function test_reset_auto_increment(): void {
         $this->initMysql();
         DB::insert(
             'table1',
             [
                 'name' => 'test1',
                 'age'  => null,
-            ]
+            ],
         );
         DB::insert(
             'table1',
             [
                 'name' => 'test2',
                 'age'  => 10,
-            ]
+            ],
         );
         DB::delete('table1');
         DB::insert(
@@ -736,7 +719,7 @@ class DBTest extends TestCase
             [
                 'name' => 'test1',
                 'age'  => null,
-            ]
+            ],
         );
         self::assertEquals(3, DB::getInsertId());
         DB::delete('table1');
@@ -746,27 +729,27 @@ class DBTest extends TestCase
             [
                 'name' => 'test1',
                 'age'  => null,
-            ]
+            ],
         );
         self::assertEquals(1, DB::getInsertId());
     }
 
     #[Depends('testInitSqlite')]
-    public function testResetAutoIncrementSqlite() : void {
+    public function test_reset_auto_increment_sqlite(): void {
         $this->initSqlite();
         DB::insert(
             'table1',
             [
                 'name' => 'test1',
                 'age'  => null,
-            ]
+            ],
         );
         DB::insert(
             'table1',
             [
                 'name' => 'test2',
                 'age'  => 10,
-            ]
+            ],
         );
         DB::delete('table1');
         DB::insert(
@@ -774,7 +757,7 @@ class DBTest extends TestCase
             [
                 'name' => 'test1',
                 'age'  => null,
-            ]
+            ],
         );
         self::assertEquals(3, DB::getInsertId());
         DB::delete('table1');
@@ -784,20 +767,20 @@ class DBTest extends TestCase
             [
                 'name' => 'test1',
                 'age'  => null,
-            ]
+            ],
         );
         self::assertEquals(1, DB::getInsertId());
     }
 
     #[Depends('testInitSqlite')]
-    public function testInsertGet() : void {
+    public function test_insert_get(): void {
         $this->initSqlite();
         $query = DB::insertGet(
             'table1',
             [
                 'name' => 'test1',
                 'age'  => null,
-            ]
+            ],
         );
         /** @noinspection UnnecessaryAssertionInspection */
         self::assertInstanceOf(Fluent::class, $query);
@@ -807,14 +790,14 @@ class DBTest extends TestCase
     }
 
     #[Depends('testInitMysql')]
-    public function testUpdate() : void {
+    public function test_update(): void {
         $this->initMysql();
         DB::insert(
             'table1',
             [
                 'name' => 'test1',
                 'age'  => null,
-            ]
+            ],
         );
         $id = DB::getInsertId();
         $count = DB::update(
@@ -825,7 +808,7 @@ class DBTest extends TestCase
             [
                 'id = %i',
                 $id,
-            ]
+            ],
         );
         self::assertIsInt($count);
         self::assertEquals(1, $count);
@@ -839,7 +822,7 @@ class DBTest extends TestCase
             'table1',
             [
                 'name' => 'hello!',
-            ]
+            ],
         );
         self::assertInstanceOf(Fluent::class, $query);
         $query->execute();
@@ -852,14 +835,14 @@ class DBTest extends TestCase
     }
 
     #[Depends('testInitSqlite')]
-    public function testDeleteGet() : void {
+    public function test_delete_get(): void {
         $this->initSqlite();
         DB::insert(
             'table1',
             [
                 'name' => 'test1',
                 'age'  => null,
-            ]
+            ],
         );
         $id = DB::getInsertId();
         /** @var Result $query */
@@ -868,14 +851,14 @@ class DBTest extends TestCase
     }
 
     #[Depends('testInitSqlite')]
-    public function testDelete() : void {
+    public function test_delete(): void {
         $this->initSqlite();
         DB::insert(
             'table1',
             [
                 'name' => 'test1',
                 'age'  => null,
-            ]
+            ],
         );
         $id = DB::getInsertId();
         $count = DB::delete('table1', ['id = %i', $id]);
@@ -883,14 +866,14 @@ class DBTest extends TestCase
     }
 
     #[Depends('testInitMysql')]
-    public function testReplace() : void {
+    public function test_replace(): void {
         $this->initMysql();
         DB::insert(
             'table1',
             [
                 'name' => 'test1',
                 'age'  => null,
-            ]
+            ],
         );
         $id = DB::getInsertId();
         DB::replace(
@@ -899,7 +882,7 @@ class DBTest extends TestCase
                 'id'   => $id,
                 'name' => 'name',
                 'age'  => 1,
-            ]
+            ],
         );
         /** @var Row|null $row */
         $row = DB::select('table1', '*')->where('id = %i', $id)->fetch(cache: false);
@@ -921,7 +904,7 @@ class DBTest extends TestCase
                     'age'  => 30,
                     'date' => new DateTime('now'),
                 ],
-            ]
+            ],
         );
         $row = DB::select('table1', '*')->where('id = %i', $id)->fetch(cache: false);
         self::assertNotNull($row);
@@ -938,14 +921,14 @@ class DBTest extends TestCase
     }
 
     #[Depends('testInsert')]
-    public function testSelect() : void {
+    public function test_select(): void {
         $this->initSqlite();
         DB::insert(
             'table1',
             [
                 'name' => 'test1',
                 'age'  => null,
-            ]
+            ],
         );
         $id1 = DB::getInsertId();
         DB::insert(
@@ -953,7 +936,7 @@ class DBTest extends TestCase
             [
                 'name' => 'test2',
                 'age'  => 12,
-            ]
+            ],
         );
         //$id2 = DB::getInsertId();
         DB::insert(
@@ -961,7 +944,7 @@ class DBTest extends TestCase
             [
                 'name'       => 'test3',
                 'table_1_id' => $id1,
-            ]
+            ],
         );
         //$id3 = DB::getInsertId();
         DB::insert(
@@ -969,7 +952,7 @@ class DBTest extends TestCase
             [
                 'name'       => 'test4',
                 'table_1_id' => null,
-            ]
+            ],
         );
         //$id4 = DB::getInsertId();
 
@@ -979,9 +962,9 @@ class DBTest extends TestCase
 
         // Join select with alias
         $rows = DB::select(['table1', 'a'], 'a.id, a.name, a.age, b.name as value')
-                  ->join('table2', 'b')
-                  ->on('a.id = b.table_1_id')
-                  ->fetchAll(cache: false);
+            ->join('table2', 'b')
+            ->on('a.id = b.table_1_id')
+            ->fetchAll(cache: false);
         self::assertCount(1, $rows);
         /** @var Row $row */
         $row = first($rows);
@@ -996,20 +979,19 @@ class DBTest extends TestCase
 
         // Test from starter followed by select
         $rows = DB::from('table1')
-                  ->select('*')
-                  ->fetchAll(cache: false);
+            ->select('*')
+            ->fetchAll(cache: false);
         self::assertCount(2, $rows);
 
         // Test from starter with alias followed by select
         $rows = DB::from(['table1', 'a'])
-                  ->select('a.id, a.name')
-                  ->fetchAll(cache: false);
+            ->select('a.id, a.name')
+            ->fetchAll(cache: false);
         self::assertCount(2, $rows);
     }
 
     #[Depends('testInitSqlite')]
-    public function testFromRequiresSelect(): void
-    {
+    public function test_from_requires_select(): void {
         $this->initSqlite();
 
         $this->expectException(LogicException::class);
@@ -1019,14 +1001,14 @@ class DBTest extends TestCase
     }
 
     #[Depends('testSelect')]
-    public function testSelectDto() : void {
+    public function test_select_dto(): void {
         $this->initSqlite();
         DB::insert(
             'table1',
             [
                 'name' => 'Hello',
                 'age'  => null,
-            ]
+            ],
         );
         $id1 = DB::getInsertId();
         DB::insert(
@@ -1034,7 +1016,7 @@ class DBTest extends TestCase
             [
                 'name' => 'AAAAAAAA',
                 'age'  => 69,
-            ]
+            ],
         );
         $id2 = DB::getInsertId();
 
@@ -1053,14 +1035,14 @@ class DBTest extends TestCase
     }
 
     #[Depends('testSelect')]
-    public function testSelectIterator() : void {
+    public function test_select_iterator(): void {
         $this->initSqlite();
         DB::insert(
             'table1',
             [
                 'name' => 'dasdads',
                 'age'  => null,
-            ]
+            ],
         );
         $id1 = DB::getInsertId();
         DB::insert(
@@ -1068,7 +1050,7 @@ class DBTest extends TestCase
             [
                 'name' => 'jijlkmn',
                 'age'  => 90,
-            ]
+            ],
         );
         $id2 = DB::getInsertId();
 
@@ -1098,14 +1080,14 @@ class DBTest extends TestCase
     }
 
     #[Depends('testSelect')]
-    public function testSelectIteratorDto() : void {
+    public function test_select_iterator_dto(): void {
         $this->initSqlite();
         DB::insert(
             'table1',
             [
                 'name' => 'ijoink',
                 'age'  => null,
-            ]
+            ],
         );
         $id1 = DB::getInsertId();
         DB::insert(
@@ -1113,7 +1095,7 @@ class DBTest extends TestCase
             [
                 'name' => 'uuuuuuuuu',
                 'age'  => 456,
-            ]
+            ],
         );
         $id2 = DB::getInsertId();
 
@@ -1143,14 +1125,14 @@ class DBTest extends TestCase
     }
 
     #[Depends('testInsert')]
-    public function testSelectCache() : void {
+    public function test_select_cache(): void {
         $this->initSqlite();
         DB::insert(
             'table1',
             [
                 'name' => 'test1',
                 'age'  => null,
-            ]
+            ],
         );
         $id1 = DB::getInsertId();
         DB::insert(
@@ -1158,7 +1140,7 @@ class DBTest extends TestCase
             [
                 'name' => 'test2',
                 'age'  => 12,
-            ]
+            ],
         );
         //$id2 = DB::getInsertId();
         DB::insert(
@@ -1166,7 +1148,7 @@ class DBTest extends TestCase
             [
                 'name'       => 'test3',
                 'table_1_id' => $id1,
-            ]
+            ],
         );
         //$id3 = DB::getInsertId();
         DB::insert(
@@ -1174,7 +1156,7 @@ class DBTest extends TestCase
             [
                 'name'       => 'test4',
                 'table_1_id' => null,
-            ]
+            ],
         );
         //$id4 = DB::getInsertId();
 
@@ -1184,9 +1166,9 @@ class DBTest extends TestCase
 
         // Join select with alias
         $rows = DB::select(['table1', 'a'], 'a.id, a.name, a.age, b.name as value')
-                  ->join('table2', 'b')
-                  ->on('a.id = b.table_1_id')
-                  ->fetchAll(cache: true);
+            ->join('table2', 'b')
+            ->on('a.id = b.table_1_id')
+            ->fetchAll(cache: true);
         self::assertCount(1, $rows);
         /** @var Row $row */
         $row = first($rows);
@@ -1197,14 +1179,14 @@ class DBTest extends TestCase
     }
 
     #[Depends('testSelect')]
-    public function testSelectDtoCache() : void {
+    public function test_select_dto_cache(): void {
         $this->initSqlite();
         DB::insert(
             'table1',
             [
                 'name' => 'Hello',
                 'age'  => null,
-            ]
+            ],
         );
         $id1 = DB::getInsertId();
         DB::insert(
@@ -1212,7 +1194,7 @@ class DBTest extends TestCase
             [
                 'name' => 'AAAAAAAA',
                 'age'  => 69,
-            ]
+            ],
         );
         $id2 = DB::getInsertId();
 
@@ -1231,14 +1213,14 @@ class DBTest extends TestCase
     }
 
     #[Depends('testSelect')]
-    public function testSelectIteratorCache() : void {
+    public function test_select_iterator_cache(): void {
         $this->initSqlite();
         DB::insert(
             'table1',
             [
                 'name' => 'dasdads',
                 'age'  => null,
-            ]
+            ],
         );
         $id1 = DB::getInsertId();
         DB::insert(
@@ -1246,7 +1228,7 @@ class DBTest extends TestCase
             [
                 'name' => 'jijlkmn',
                 'age'  => 90,
-            ]
+            ],
         );
         $id2 = DB::getInsertId();
 
@@ -1276,14 +1258,14 @@ class DBTest extends TestCase
     }
 
     #[Depends('testSelect')]
-    public function testSelectIteratorDtoCache() : void {
+    public function test_select_iterator_dto_cache(): void {
         $this->initSqlite();
         DB::insert(
             'table1',
             [
                 'name' => 'ijoink',
                 'age'  => null,
-            ]
+            ],
         );
         $id1 = DB::getInsertId();
         DB::insert(
@@ -1291,7 +1273,7 @@ class DBTest extends TestCase
             [
                 'name' => 'uuuuuuuuu',
                 'age'  => 456,
-            ]
+            ],
         );
         $id2 = DB::getInsertId();
 
@@ -1320,21 +1302,21 @@ class DBTest extends TestCase
 
     }
 
-    public function testExists() : void {
+    public function test_exists(): void {
         $this->initSqlite();
         DB::insert(
             'table1',
             [
                 'name' => 'ijoink',
                 'age'  => 10,
-            ]
+            ],
         );
         DB::insert(
             'table1',
             [
                 'name' => 'ijoink',
                 'age'  => 20,
-            ]
+            ],
         );
 
         $result = DB::select('table1', '*')->where('age > 10')->exists();
@@ -1347,7 +1329,7 @@ class DBTest extends TestCase
         self::assertFalse($result);
     }
 
-    protected function setUp() : void {
+    protected function setUp(): void {
         $this->cache = new Cache(
             new DevNullStorage(),
         );
@@ -1359,9 +1341,9 @@ class DBTest extends TestCase
                     new DibiRowNormalizer(),
                     new BackedEnumNormalizer(),
                     new JsonSerializableNormalizer(),
-                    new ObjectNormalizer(propertyTypeExtractor: new ReflectionExtractor(),),
-                ]
-            )
+                    new ObjectNormalizer(propertyTypeExtractor: new ReflectionExtractor(), ),
+                ],
+            ),
         );
     }
 }
