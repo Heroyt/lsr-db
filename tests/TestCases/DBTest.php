@@ -122,7 +122,7 @@ class DBTest extends TestCase
         DB::getAffectedRows();
     }
 
-    #[Depends('testInitSqlite')]
+    #[Depends('test_init_sqlite')]
     public function test_insert(): void {
         $this->initSqlite();
         $count = DB::insert(
@@ -135,7 +135,7 @@ class DBTest extends TestCase
         self::assertEquals(1, $count);
     }
 
-    #[Depends('testInitSqlite')]
+    #[Depends('test_init_sqlite')]
     public function test_insert_transactional(): void {
         $this->initSqlite();
         DB::transaction(
@@ -296,7 +296,7 @@ class DBTest extends TestCase
         return $connection;
     }
 
-    #[Depends('testInitMysql')]
+    #[Depends('test_init_mysql')]
     public function test_insert_multiple(): void {
         $this->initMysql();
         $count = DB::insert(
@@ -366,7 +366,7 @@ class DBTest extends TestCase
         );
     }
 
-    #[Depends('testInitMysql')]
+    #[Depends('test_init_mysql')]
     public function test_insert_ignore(): void {
         $this->initMysql();
         $count = DB::insert(
@@ -388,7 +388,7 @@ class DBTest extends TestCase
         self::assertEquals(0, $count);
     }
 
-    #[Depends('testInitMysql')]
+    #[Depends('test_init_mysql')]
     public function test_get_affected_rows(): void {
         $this->initMysql();
         DB::insert(
@@ -684,7 +684,7 @@ class DBTest extends TestCase
         self::assertFalse(DB::getConnection()->isConnected());
     }
 
-    #[Depends('testInitMysql')]
+    #[Depends('test_init_mysql')]
     public function test_for_update_mysql_sql_generation(): void {
         $this->initMysql();
 
@@ -696,7 +696,7 @@ class DBTest extends TestCase
         self::assertSame('SELECT * FROM `table1` WHERE id = 1 LIMIT 1 FOR UPDATE', $sql);
     }
 
-    #[Depends('testInitMysql')]
+    #[Depends('test_init_mysql')]
     public function test_reset_auto_increment(): void {
         $this->initMysql();
         DB::insert(
@@ -734,7 +734,7 @@ class DBTest extends TestCase
         self::assertEquals(1, DB::getInsertId());
     }
 
-    #[Depends('testInitSqlite')]
+    #[Depends('test_init_sqlite')]
     public function test_reset_auto_increment_sqlite(): void {
         $this->initSqlite();
         DB::insert(
@@ -772,7 +772,7 @@ class DBTest extends TestCase
         self::assertEquals(1, DB::getInsertId());
     }
 
-    #[Depends('testInitSqlite')]
+    #[Depends('test_init_sqlite')]
     public function test_insert_get(): void {
         $this->initSqlite();
         $query = DB::insertGet(
@@ -789,7 +789,7 @@ class DBTest extends TestCase
         self::assertEquals(1, $count->count());
     }
 
-    #[Depends('testInitMysql')]
+    #[Depends('test_init_mysql')]
     public function test_update(): void {
         $this->initMysql();
         DB::insert(
@@ -834,7 +834,7 @@ class DBTest extends TestCase
         self::assertEquals(null, $row->age);
     }
 
-    #[Depends('testInitSqlite')]
+    #[Depends('test_init_sqlite')]
     public function test_delete_get(): void {
         $this->initSqlite();
         DB::insert(
@@ -850,7 +850,7 @@ class DBTest extends TestCase
         self::assertEquals(1, $query->count());
     }
 
-    #[Depends('testInitSqlite')]
+    #[Depends('test_init_sqlite')]
     public function test_delete(): void {
         $this->initSqlite();
         DB::insert(
@@ -865,7 +865,7 @@ class DBTest extends TestCase
         self::assertEquals(1, $count);
     }
 
-    #[Depends('testInitMysql')]
+    #[Depends('test_init_mysql')]
     public function test_replace(): void {
         $this->initMysql();
         DB::insert(
@@ -920,7 +920,7 @@ class DBTest extends TestCase
         self::assertEquals(30, $row->age);
     }
 
-    #[Depends('testInsert')]
+    #[Depends('test_insert')]
     public function test_select(): void {
         $this->initSqlite();
         DB::insert(
@@ -990,7 +990,7 @@ class DBTest extends TestCase
         self::assertCount(2, $rows);
     }
 
-    #[Depends('testInitSqlite')]
+    #[Depends('test_init_sqlite')]
     public function test_from_requires_select(): void {
         $this->initSqlite();
 
@@ -1000,7 +1000,7 @@ class DBTest extends TestCase
         DB::from('table1')->fetchAll(cache: false);
     }
 
-    #[Depends('testSelect')]
+    #[Depends('test_select')]
     public function test_select_dto(): void {
         $this->initSqlite();
         DB::insert(
@@ -1034,7 +1034,7 @@ class DBTest extends TestCase
         self::assertEquals(69, $rows[1]->age);
     }
 
-    #[Depends('testSelect')]
+    #[Depends('test_select')]
     public function test_select_iterator(): void {
         $this->initSqlite();
         DB::insert(
@@ -1079,7 +1079,7 @@ class DBTest extends TestCase
 
     }
 
-    #[Depends('testSelect')]
+    #[Depends('test_select')]
     public function test_select_iterator_dto(): void {
         $this->initSqlite();
         DB::insert(
@@ -1124,7 +1124,7 @@ class DBTest extends TestCase
 
     }
 
-    #[Depends('testInsert')]
+    #[Depends('test_insert')]
     public function test_select_cache(): void {
         $this->initSqlite();
         DB::insert(
@@ -1178,7 +1178,7 @@ class DBTest extends TestCase
         self::assertEquals('test3', $row->value);
     }
 
-    #[Depends('testSelect')]
+    #[Depends('test_select')]
     public function test_select_dto_cache(): void {
         $this->initSqlite();
         DB::insert(
@@ -1212,7 +1212,7 @@ class DBTest extends TestCase
         self::assertEquals(69, $rows[1]->age);
     }
 
-    #[Depends('testSelect')]
+    #[Depends('test_select')]
     public function test_select_iterator_cache(): void {
         $this->initSqlite();
         DB::insert(
@@ -1257,7 +1257,7 @@ class DBTest extends TestCase
 
     }
 
-    #[Depends('testSelect')]
+    #[Depends('test_select')]
     public function test_select_iterator_dto_cache(): void {
         $this->initSqlite();
         DB::insert(
