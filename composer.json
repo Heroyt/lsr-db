@@ -43,7 +43,7 @@
   "require": {
     "php": ">= 8.4",
     "lsr/logging": "^0.3",
-    "lsr/cache": "^0.3",
+    "lsr/caching": "^0.3",
     "lsr/serializer": "^0.3",
     "nette/di": "^3.2",
     "nette/schema": "^1.2.5",
