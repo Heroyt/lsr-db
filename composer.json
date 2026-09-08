@@ -10,11 +10,15 @@
     }
   ],
   "scripts": {
+    "cs:fix": "./vendor/bin/php-cs-fixer fix --config=.php-cs-fixer.php",
+    "cbf": "@cs:fix",
+    "cs": "./vendor/bin/php-cs-fixer fix --config=.php-cs-fixer.php --dry-run --diff",
     "test": "XDEBUG_MODE=coverage ./vendor/bin/phpunit",
     "docs": "doxygen",
     "phpstan": "./vendor/bin/phpstan"
   },
   "require-dev": {
+    "friendsofphp/php-cs-fixer": "^3.95",
     "roave/security-advisories": "dev-latest",
     "phpunit/phpunit": "^12",
     "phpstan/phpstan": "^2.0",
