@@ -59,7 +59,7 @@ Without the DI extension, use [`DB::createConnection($cache, $mapper, $config, $
 
 ## Database logging
 
-**Unreleased:** logger injection and the configuration below are working-tree changes, not features of an existing published version. Check installed source before using them.
+**Available since `lsr/db 0.3.17`.** Check the installed version before using logger injection and the configuration below.
 
 `Connection::__construct($cache, $mapper, $config, $name = null, $logger = null)`, `DB::createConnection()` and `DB::getMain()` accept an optional `Psr\Log\LoggerInterface` as their final `$logger` argument. Existing positional and named arguments remain valid. For standalone connections, pass the logger separately from the driver configuration:
 

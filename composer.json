@@ -2,7 +2,7 @@
   "name": "lsr/db",
   "license": "MIT",
   "description": "Laser framework core - DB",
-  "version": "0.3.16",
+  "version": "0.3.17",
   "repositories": [
     {
       "type": "composer",
