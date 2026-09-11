@@ -5,10 +5,10 @@
 ## Requirements
 
 - PHP `>= 8.4`.
-- Dibi `^5`, Nette DI `^3.2`, Nette Schema `^1.2.5`, and `lsr/logging`, `lsr/caching` and `lsr/serializer` `^0.3` (installed by Composer).
+- Dibi `^5`, Nette DI `^3.2.4` (native lazy logger services), Nette Schema `^1.2.5`, PSR Log `^1.0 || ^2.0 || ^3.0`, and `lsr/logging`, `lsr/caching` and `lsr/serializer` `^0.3` (installed by Composer).
 - The PHP database extension for the configured driver, such as `ext-mysqli`, `ext-sqlite3`, or `ext-pdo` with `ext-pdo_sqlite`/`ext-pdo_mysql`. This package does not declare a particular driver extension; its dependencies also impose their own extension requirements, including `ext-redis` through `lsr/caching`.
 - Application-provided `Lsr\Caching\Cache` and `Lsr\Serializer\Mapper` services.
-- Define `LOG_DIR` before database use: the connection creates its database logger from this application constant. Use an application-owned writable log directory with a trailing directory separator. File-based SQLite configurations also need an existing writable parent directory; the native SQLite fallback path uses `TMP_DIR . 'db.db'`.
+- Define `LOG_DIR` before using a default database logger. Without an explicit logger, connections lazily create `Lsr\Logging\Logger(LOG_DIR, 'db')`; use an application-owned writable directory. An injected logger does not require this constant. File-based SQLite configurations also need an existing writable parent directory; the native SQLite fallback path uses `TMP_DIR . 'db.db'`.
 
 ## Installation
 
@@ -18,7 +18,7 @@ composer require lsr/db
 
 ## Nette DI integration
 
-This is an integration into an existing application container, not a standalone bootstrap. First register the cache and mapper services and define the application path constants described above. Then register [`Lsr\Db\DI\DbExtension`](src/DI/DbExtension.php):
+This is an integration into an existing application container, not a standalone bootstrap. First register the cache and mapper services, then register [`Lsr\Db\DI\DbExtension`](src/DI/DbExtension.php). Default loggers resolve `LOG_DIR` at runtime, not during container compilation:
 
 ```neon
 extensions:
@@ -51,11 +51,49 @@ The schema in [`DbExtension`](src/DI/DbExtension.php) lists the supported config
 
 ## Manual initialization and queries
 
-Without the DI extension, use [`DB::createConnection($cache, $mapper, $config, $name)`](src/DB.php), then `DB::init($connection)` to register the main connection. `DB::initNamed($name, $connection)` adds other connections. `DB::getMain($cache, $mapper)` builds a connection from the package's environment-variable configuration when no explicit configuration is passed; it still needs `DB::init()` before static query calls. The environment keys include `DB_driver`, `DB_host`, `DB_port`, `DB_user`, `DB_password`, `DB_NAME`, `DB_dsn` and `DB_pdoDriver`; their exact defaults and remaining options are defined in [`DB::getMain()`](src/DB.php).
+Without the DI extension, use [`DB::createConnection($cache, $mapper, $config, $name = null, $logger = null)`](src/DB.php), then `DB::init($connection)` to register the main connection. `DB::initNamed($name, $connection)` adds other connections. `DB::getMain($cache, $mapper, $config = [], $logger = null)` builds a connection from the package's environment-variable configuration when no explicit configuration is passed; it still needs `DB::init()` before static query calls. The environment keys include `DB_driver`, `DB_host`, `DB_port`, `DB_user`, `DB_password`, `DB_NAME`, `DB_dsn` and `DB_pdoDriver`; their exact defaults and remaining options are defined in [`DB::getMain()`](src/DB.php).
 
 [`Lsr\Db\Connection`](src/Connection.php) supports Dibi placeholder queries, inserts, updates, deletes and fluent reads. Its `select($table, ...$fields)` takes the table first, unlike Dibi's field-first builder. `from($table)->select(...)` is also available.
 
 [`Lsr\Db\Dibi\Fluent`](src/Dibi/Fluent.php) adds the cached fetch methods in [`FetchFunctions`](src/Dibi/FetchFunctions.php), including `fetchDto()` and `fetchAllDto()`. These use the configured mapper for DTO conversion. Read helpers use caching by default; pass their `cache: false` argument when an uncached read is required.
+
+## Database logging
+
+**Unreleased:** logger injection and the configuration below are working-tree changes, not features of an existing published version. Check installed source before using them.
+
+`Connection::__construct($cache, $mapper, $config, $name = null, $logger = null)`, `DB::createConnection()` and `DB::getMain()` accept an optional `Psr\Log\LoggerInterface` as their final `$logger` argument. Existing positional and named arguments remain valid. For standalone connections, pass the logger separately from the driver configuration:
+
+```php
+$connection = DB::createConnection(
+    $cache,
+    $mapper,
+    ['driver' => 'pdo', 'dsn' => 'sqlite::memory:'],
+    logger: $logger,
+);
+```
+
+In Nette DI, select application-owned logger services using native `@service` references:
+
+```neon
+db:
+    logger: @sharedDatabaseLogger
+    connections:
+        main:
+            driver: pdo
+            dsn: "sqlite::memory:"
+        reporting:
+            driver: pdo
+            dsn: "sqlite::memory:"
+            logger: @reportingLogger
+```
+
+Both referenced services must implement `Psr\Log\LoggerInterface`. The optional root `logger` is shared by connections without their own override. A connection's non-null `logger` takes precedence over the root; `null` means inherit the root, or use the legacy dedicated default if the root is also null. Selecting the same service for several connections shares the actual logger object.
+
+The extension exposes `db.logger` for the root selection and `db.logger.<name>` for each effective connection logger, including `db.logger.main`. All these services are non-autowired by type, so they do not compete with the application's `@logger`. The prefix follows the extension's registered name. A main-connection override changes `db.logger.main`, not the common `db.logger` or other connections.
+
+Without overrides, the main logger is `db.logger`, and named connections keep separate lazy default logger instances. Each uses runtime `LOG_DIR` and the `db` file name (`db-YYYY-MM-DD.log`). The extension never implicitly adopts a global `@logger`; use `logger: @logger` to opt in. Logger selection is not part of driver options or the connection's cache namespace.
+
+[`DibiEventLogger`](src/Logging/DibiEventLogger.php) translates failed Dibi events into the same records as the legacy `Logger::logDb()` helper: one `error` record with the exception message and an optional nonzero code prefix, followed by one `debug` record (`SQL: ...`) only when the exception contains nonempty SQL. Contexts remain empty; successful events are not logged. Logger exceptions propagate synchronously, and a failed error write prevents the following debug write. The public logging-package helper remains available and unchanged.
 
 ## Transactions and long-running processes
 
