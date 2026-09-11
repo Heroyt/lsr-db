@@ -19,12 +19,14 @@ use Lsr\Caching\Cache;
 use Lsr\Db\Dibi\Fluent;
 use Lsr\Db\Lifecycle\DatabaseLifecycleEvent;
 use Lsr\Db\Lifecycle\DatabaseLifecycleHookInterface;
+use Lsr\Db\Logging\DibiEventLogger;
 use Lsr\Logging\Logger;
 use Lsr\Serializer\Mapper;
 use mysqli;
 use mysqli_sql_exception;
 use PDO;
 use PDOException;
+use Psr\Log\LoggerInterface;
 use ReflectionProperty;
 use Throwable;
 use WeakMap;
@@ -91,7 +93,7 @@ final class Connection
                 if ( ! empty($this->config['prefix'])) {
                     $this->connection->getSubstitutes()->__set('', $this->config['prefix']);
                 }
-                $this->connection->onEvent[] = [$this->logger, 'logDb'];
+                $this->connection->onEvent[] = new DibiEventLogger($this->logger);
                 $this->registerLifecycleListener();
                 if ($startedAt !== null && empty($this->config['lazy'])) {
                     $this->recordLifecycle(
@@ -109,7 +111,7 @@ final class Connection
         }
     }
 
-    private Logger $logger {
+    private LoggerInterface $logger {
         get {
             if ( ! isset($this->logger)) {
                 $this->logger = new Logger(LOG_DIR, 'db');
@@ -126,7 +128,11 @@ final class Connection
         private readonly Mapper  $mapper,
         array $config,
         private readonly ?string $name = null,
+        ?LoggerInterface $logger = null,
     ) {
+        if ($logger !== null) {
+            $this->logger = $logger;
+        }
         /** @var Config $config */
         $this->config = $this->normalizeConfig($config);
         $this->cacheNamespace = $name === 'main'

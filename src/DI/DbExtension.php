@@ -6,10 +6,13 @@ namespace Lsr\Db\DI;
 
 use Lsr\Db\Connection;
 use Lsr\Db\DB;
+use Lsr\Logging\Logger;
 use Nette\DI\CompilerExtension;
 use Nette\DI\Definitions\Reference;
+use Nette\PhpGenerator\Literal;
 use Nette\Schema\Expect;
 use Nette\Schema\Schema;
+use Psr\Log\LoggerInterface;
 
 /**
  * Registers the main connection as "<extension>.connection" and named
@@ -18,7 +21,9 @@ use Nette\Schema\Schema;
  * extension keep using the existing manual DB::init() lifecycle.
  *
  * @property-read object{
+ *     logger: string|Reference|null,
  *     connections: array<string, object{
+ *         logger: string|Reference|null,
  *         driver: string,
  *         dsn: string|null,
  *         pdoDriver: string|null,
@@ -43,6 +48,10 @@ final class DbExtension extends CompilerExtension
 {
     public function getConfigSchema(): Schema {
         $connection = Expect::structure([
+            'logger' => Expect::anyOf(
+                Expect::string()->pattern('@.+'),
+                Expect::type(Reference::class),
+            )->nullable()->default(null),
             'driver' => Expect::string()->default('mysqli')->assert(
                 static fn (mixed $driver): bool => is_string($driver) && $driver !== '',
                 'Database driver cannot be empty.',
@@ -66,6 +75,10 @@ final class DbExtension extends CompilerExtension
         ]);
 
         return Expect::structure([
+            'logger' => Expect::anyOf(
+                Expect::string()->pattern('@.+'),
+                Expect::type(Reference::class),
+            )->nullable()->default(null),
             'connections' => Expect::arrayOf(
                 $connection,
                 Expect::string()->pattern('[A-Za-z0-9_]+'),
@@ -80,8 +93,15 @@ final class DbExtension extends CompilerExtension
     public function loadConfiguration(): void {
         $builder = $this->getContainerBuilder();
         $definitions = [];
+        $this->registerLogger($this->prefix('logger'), $this->config->logger);
 
         foreach ($this->config->connections as $name => $config) {
+            $loggerName = $this->prefix('logger.' . $name);
+            $logger = $config->logger;
+            if ($logger === null && ($this->config->logger !== null || $name === 'main')) {
+                $logger = new Reference($this->prefix('logger'));
+            }
+            $this->registerLogger($loggerName, $logger);
             $serviceName = $name === 'main'
                 ? $this->prefix('connection')
                 : $this->prefix('connection.' . $name);
@@ -92,6 +112,7 @@ final class DbExtension extends CompilerExtension
                     [
                         'config' => self::normalizeConfig($config),
                         'name' => $name,
+                        'logger' => new Reference($loggerName),
                     ],
                 )
                 ->setAutowired($name === 'main')
@@ -118,13 +139,26 @@ final class DbExtension extends CompilerExtension
         }
     }
 
+    private function registerLogger(string $name, string|Reference|null $logger): void {
+        $definition = $this->getContainerBuilder()->addDefinition($name)
+            ->setAutowired(false);
+        if ($logger !== null) {
+            $definition->setType(LoggerInterface::class)
+                ->setFactory(is_string($logger) ? new Reference(substr($logger, 1)) : $logger);
+            return;
+        }
+
+        $definition->setFactory(Logger::class, [new Literal('LOG_DIR'), 'db']);
+        $definition->lazy = true;
+    }
+
     /**
      * @return array<string, mixed>
      */
     private static function normalizeConfig(object $config): array {
         $normalized = [];
         foreach ((array) $config as $name => $value) {
-            if ($value !== null) {
+            if ($name !== 'logger' && $value !== null) {
                 $normalized[(string) $name] = $value;
             }
         }

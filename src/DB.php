@@ -18,6 +18,7 @@ use InvalidArgumentException;
 use Lsr\Caching\Cache;
 use Lsr\Db\Dibi\Fluent;
 use Lsr\Serializer\Mapper;
+use Psr\Log\LoggerInterface;
 use RuntimeException;
 
 /**
@@ -154,6 +155,7 @@ class DB
         Cache  $cache,
         Mapper $mapper,
         array  $config = [],
+        ?LoggerInterface $logger = null,
     ): Connection {
         // DB_autoReconnect only applies to environment-based initialization.
         // Explicit configurations opt in with autoReconnect => true instead.
@@ -219,7 +221,7 @@ class DB
             ];
         }
 
-        return self::createConnection($cache, $mapper, $config, 'main');
+        return self::createConnection($cache, $mapper, $config, 'main', $logger);
     }
 
     /**
@@ -234,6 +236,7 @@ class DB
         Mapper  $mapper,
         array   $config,
         ?string $name = null,
+        ?LoggerInterface $logger = null,
     ): Connection {
         if ($name !== null) {
             self::assertConnectionName($name);
@@ -244,6 +247,7 @@ class DB
             $mapper,
             self::buildOptions($config),
             $name,
+            $logger,
         );
     }
 
